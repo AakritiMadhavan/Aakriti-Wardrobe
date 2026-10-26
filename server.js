@@ -98,11 +98,18 @@ async function loadStore() {
   };
 }
 
+
 async function init() {
-  await pool.query(fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8'));
+  await pool.query(
+    fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
+  );
+
   const { rows } = await pool.query('SELECT count(*)::int AS n FROM categories');
+
   if (rows[0].n === 0) {
-    await pool.query(fs.readFileSync(path.join(__dirname, 'db', 'seed.sql'), 'utf8'));
+    await pool.query(
+      fs.readFileSync(path.join(__dirname, 'seed.sql'), 'utf8')
+    );
     console.log('Loaded starter categories and sample items.');
   }
 }
