@@ -311,8 +311,10 @@ app.get('/img/:id', wrap(async (req, res) => {
   res.send(r.rows[0].data);
 }));
 
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, index: 'index.html' }));
-
+app.use(express.static(__dirname, {
+  maxAge: 0,
+  index: 'index.html'
+}));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
