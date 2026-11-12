@@ -44,8 +44,9 @@
   function store(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
 
-  function api(method, url, body) {
+  function api(method, url, body, signal) {
     var opt = { method: method, credentials: 'same-origin', headers: {} };
+    if (signal) opt.signal = signal;
     if (body instanceof FormData) opt.body = body;
     else if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
     return fetch(url, opt).then(function (r) {
@@ -204,7 +205,7 @@
     clear(els.main);
     curRefresh = null;
     var node;
-    if (!loaded) node = loadError ? pageMessage('Could not load the catalogue', loadError) : h('p', { class: 'boot', text: 'Loading…' });
+    if (!loaded) node = loadError ? h('div', { class: 'empty' }, h('h2', { text: 'Could not load the wardrobe' }), h('p', { text: loadError }), h('button', { class: 'btn primary', type: 'button', text: 'Try again', onclick: function () { location.reload(); } })) : h('p', { class: 'boot', text: 'Loading…' });
     else if (route.name === 'item') node = pageItem(itemById(route.id));
     else if (route.name === 'cat') {
       var c = catById(route.id);
@@ -223,6 +224,7 @@
     else node = pageHome();
     els.main.appendChild(node);
     document.body.classList.toggle('on-home', route.name === 'home');
+    document.body.classList.toggle('on-login', !!els.main.querySelector('.studio-login'));
     document.body.classList.toggle('on-item', route.name === 'item');
     document.body.classList.toggle('on-diary', route.name === 'diary' && isAdmin);
     document.body.classList.toggle('on-list', ['cat', 'new', 'search'].indexOf(route.name) !== -1);
@@ -622,7 +624,7 @@
     if (!d.result) return;
     if (!d.result.images.length) {
       a.appendChild(h('div', { class: 'import-empty' }, h('h2', { text: 'No photos found' }), h('p', { text: 'Try the direct product page, or add the photos yourself.' }),
-        h('button', { class: 'btn', text: 'Add item manually', type: 'button', onclick: function () { openEditor(null, null, { source: d.result.source, name: d.result.name, price: d.result.price }); } })));
+        h('button', { class: 'btn', text: 'Add item manually', type: 'button', onclick: function () { openEditor(null, null, { source: d.result.source, name: d.result.name, price: d.result.price, importSession: d }); } })));
       return;
     }
     var grid = h('div', { class: 'import-grid' });
@@ -648,7 +650,7 @@
         if (!files.length) d.error = 'Could not download the selected photos. Try different photos or upload them manually.';
         render(true);
         if (files.length) {
-          openEditor(null, null, { files: files, source: result.source, name: result.name, price: result.price });
+          openEditor(null, null, { files: files, source: result.source, name: result.name, price: result.price, importSession: d });
           if (failures) toast(failures + ' photos could not be imported. The other photos are ready.', true);
         }
       });
@@ -884,6 +886,10 @@
       req.then(function (res) {
         toast(isEdit ? 'Saved “' + nm + '”' : 'Added “' + nm + '”');
         closeEditor();
+        if (!isEdit && imported && imported.importSession === importDraft) {
+          importDraft = { url: '', result: null, selected: [], scanning: false, preparing: false, error: '' };
+          if (route.name === 'admin' && ui.tab === 'import') render(true);
+        }
         if (!isEdit && imported && imported.wishlistId) {
           if (wishlist.entries) wishlist.entries = wishlist.entries.filter(function (entry) { return entry.id !== imported.wishlistId; });
           if (wishlistDraft.id === imported.wishlistId) wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
@@ -895,9 +901,9 @@
     d.appendChild(h('button', { class: 'dlg-close', type: 'button', 'aria-label': 'Close', onclick: closeEditor, text: '×' }));
     d.appendChild(h('div', { class: 'ed' },
       h('h2', { text: isEdit ? 'Edit item' : 'Add item' }),
-      h('div', { class: 'field' }, h('span', { class: 'lbl', text: 'Photos' }), photos,
+      h('div', { class: 'field editor-photos' }, h('span', { class: 'lbl', text: 'Photos' }), photos,
         h('span', { class: 'hint', text: 'The first photo is the cover. JPG, PNG or WebP. Large photos are resized for you.' })),
-      h('div', { class: 'field' }, h('label', { for: 'f-name', text: 'Name' }), name),
+      h('div', { class: 'field editor-name' }, h('label', { for: 'f-name', text: 'Name' }), name),
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'f-cat', text: 'Category' }), cat),
         h('div', { class: 'field' }, h('label', { for: 'f-price', text: 'Price (₹)' }), price)),
@@ -1029,11 +1035,23 @@
   }
 
   /* ---------- boot ---------- */
+  function dismissLoader() {
+    document.body.classList.remove('is-loading');
+    var app = document.getElementById('app');
+    app.removeAttribute('inert'); app.removeAttribute('aria-busy');
+    var loader = document.getElementById('site-loader');
+    if (loader) {
+      loader.classList.add('is-leaving');
+      setTimeout(function () { loader.remove(); }, 350);
+    }
+  }
   build();
   window.addEventListener('hashchange', function () { render(false); });
   render(false);
+  var bootController = new AbortController();
+  var bootTimeout = setTimeout(function () { bootController.abort(); }, 30000);
   Promise.all([
-    api('GET', '/api/me').then(function (m) { isAdmin = !!m.admin; }).catch(function () { isAdmin = false; }),
-    api('GET', '/api/store').then(function (s) { state = s; loaded = true; }).catch(function (e) { loadError = e.message; })
-  ]).then(function () { render(true); });
+    api('GET', '/api/me', undefined, bootController.signal).then(function (m) { isAdmin = !!m.admin; }).catch(function () { isAdmin = false; }),
+    api('GET', '/api/store', undefined, bootController.signal).then(function (s) { state = s; loaded = true; }).catch(function (e) { loadError = e.name === 'AbortError' ? 'The connection is taking longer than expected. Please try again.' : e.message; })
+  ]).then(function () { clearTimeout(bootTimeout); render(true); dismissLoader(); });
 })();
