@@ -7,6 +7,9 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const webImport = require('./lib/web-import');
+const { readWishlistFields } = require('./lib/wishlist');
+const diary = require('./public/diary-utils');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -169,6 +172,88 @@ app.post('/api/logout', (req, res) => {
   res.json({ admin: false });
 });
 
+/* Webpage image import: authenticated, bounded, and restricted to public addresses. */
+function importToken(url, source) {
+  const payload = Buffer.from(JSON.stringify({ url, source, exp: Date.now() + 30 * 60 * 1000 })).toString('base64url');
+  return payload + '.' + sign('web-import:' + payload);
+}
+function readImportToken(token) {
+  if (typeof token !== 'string' || token.length > 16000) throw webImport.fail('This image preview has expired. Scan the page again.');
+  const [payload, mac] = token.split('.');
+  if (!payload || !mac || !safeEqual(mac, sign('web-import:' + payload))) throw webImport.fail('This image preview is not valid. Scan the page again.');
+  let value;
+  try { value = JSON.parse(Buffer.from(payload, 'base64url').toString()); } catch { throw webImport.fail('This image preview is not valid.'); }
+  if (!Number.isFinite(value.exp) || value.exp < Date.now()) throw webImport.fail('This image preview has expired. Scan the page again.');
+  return value;
+}
+let importScans = 0, importImages = 0;
+app.post('/api/import/scan', requireAdmin, wrap(async (req, res) => {
+  if (importScans >= 2) return res.status(429).json({ error: 'An import is already running. Please try again in a moment.' });
+  importScans++;
+  try {
+    const page = await webImport.download(webImport.webURL(req.body.url).href);
+    const result = webImport.extractPage(page.data.toString('utf8'), page.url);
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...result, images: result.images.map((url, i) => ({ id: i, preview: '/api/import/image?token=' + encodeURIComponent(importToken(url, page.url)) })) });
+  } finally { importScans--; }
+}));
+app.get('/api/import/image', requireAdmin, wrap(async (req, res) => {
+  const value = readImportToken(req.query.token);
+  if (importImages >= 12) return res.status(429).json({ error: 'Too many image requests. Try again in a moment.' });
+  importImages++;
+  try {
+    const file = await webImport.download(value.url, { image: true, referer: value.source });
+    const type = webImport.imageType(file.data);
+    if (!type) throw webImport.fail('This image is not a supported JPG, PNG, WebP or GIF photo.');
+    res.set({ 'Content-Type': type, 'Cache-Control': 'private, max-age=600', 'X-Content-Type-Options': 'nosniff' });
+    res.send(file.data);
+  } finally { importImages--; }
+}));
+
+/* Diary status: private to the admin, with calendar dates in India time. */
+app.get('/api/diary', requireAdmin, wrap(async (req, res) => {
+  const today = diary.todayISO();
+  const year = String(req.query.year || today.slice(0, 4));
+  if (!/^\d{4}$/.test(year) || !diary.validYear(year, today)) return res.status(400).json({ error: 'Choose a year from 2023 through the current year.' });
+  const result = await pool.query("SELECT to_char(entry_date, 'YYYY-MM-DD') AS date, status FROM diary_entries WHERE entry_date >= $1::date AND entry_date < $2::date ORDER BY entry_date", [year + '-01-01', (Number(year) + 1) + '-01-01']);
+  const entries = Object.fromEntries(result.rows.map((entry) => [entry.date, entry.status]));
+  res.set('Cache-Control', 'no-store');
+  res.json({ year: Number(year), today, entries, stats: diary.stats(Number(year), entries, today) });
+}));
+app.put('/api/diary/:date', requireAdmin, wrap(async (req, res) => {
+  const date = req.params.date;
+  const status = req.body && req.body.status;
+  const error = diary.validateUpdate(date, status, diary.todayISO());
+  if (error) return res.status(400).json({ error });
+  if (status === 'not_written') await pool.query('DELETE FROM diary_entries WHERE entry_date = $1::date', [date]);
+  else await pool.query('INSERT INTO diary_entries (entry_date, status) VALUES ($1::date, $2) ON CONFLICT (entry_date) DO UPDATE SET status = EXCLUDED.status, updated_at = now()', [date, status]);
+  res.json({ date, status });
+}));
+
+/* Public wishlist viewing; changes remain admin-only. */
+app.get('/api/wishlist', wrap(async (req, res) => {
+  const result = await pool.query('SELECT id, title, url, created_at FROM wishlist ORDER BY created_at DESC, id');
+  res.set('Cache-Control', 'no-store');
+  res.json({ entries: result.rows });
+}));
+app.post('/api/wishlist', requireAdmin, wrap(async (req, res) => {
+  const fields = readWishlistFields(req.body);
+  if (fields.error) return res.status(400).json({ error: fields.error });
+  const result = await pool.query('INSERT INTO wishlist (id, title, url) VALUES ($1, $2, $3) RETURNING id, title, url, created_at', [newId(), fields.title, fields.url]);
+  res.status(201).json(result.rows[0]);
+}));
+app.put('/api/wishlist/:id', requireAdmin, wrap(async (req, res) => {
+  const fields = readWishlistFields(req.body);
+  if (fields.error) return res.status(400).json({ error: fields.error });
+  const result = await pool.query('UPDATE wishlist SET title = $2, url = $3 WHERE id = $1 RETURNING id, title, url, created_at', [req.params.id, fields.title, fields.url]);
+  if (!result.rowCount) return res.status(404).json({ error: 'This wishlist entry no longer exists.' });
+  res.json(result.rows[0]);
+}));
+app.delete('/api/wishlist/:id', requireAdmin, wrap(async (req, res) => {
+  await pool.query('DELETE FROM wishlist WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
 /* items */
 function readItemFields(req) {
   const name = String(req.body.name || '').trim().slice(0, 100);
@@ -227,6 +312,11 @@ app.post('/api/items', requireAdmin, upload.array('images', 10), wrap(async (req
   const id = newId();
   try {
     await client.query('BEGIN');
+    const wishlistId = typeof req.body.wishlist_id === 'string' ? req.body.wishlist_id : '';
+    if (wishlistId) {
+      const wish = await client.query('SELECT id FROM wishlist WHERE id = $1 FOR UPDATE', [wishlistId]);
+      if (!wish.rowCount) throw Object.assign(new Error('This wishlist entry has already been moved or removed.'), { status: 404 });
+    }
     const c = await client.query('SELECT 1 FROM categories WHERE id = $1', [f.cat]);
     if (!c.rowCount) throw Object.assign(new Error('That category no longer exists.'), { status: 400 });
     if (f.subcat) {
@@ -235,6 +325,7 @@ app.post('/api/items', requireAdmin, upload.array('images', 10), wrap(async (req
     }
     await client.query('INSERT INTO items (id, name, category_id, subcategory_id, price, original_link) VALUES ($1, $2, $3, $4, $5, $6)', [id, f.name, f.cat, f.subcat || null, f.price, f.originalLink]);
     await writeImages(client, id, o, []);
+    if (wishlistId) await client.query('DELETE FROM wishlist WHERE id = $1', [wishlistId]);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});

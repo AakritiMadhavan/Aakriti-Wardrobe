@@ -2,7 +2,7 @@
   'use strict';
 
   /* ---------- constants ---------- */
-  var TILE_COLORS = ['#D6336C', '#B0245A', '#E8799F', '#9C2F5C', '#F08CA9', '#C2477A', '#A8345F', '#E0628F'];
+  var TILE_COLORS = ['#AC83C6', '#D889AC', '#A995CD', '#CC8BBE', '#B895CF', '#DCA1BA', '#9F88BF', '#C99ACF'];
   var BRACKETS = [
     { label: 'Under ₹1,000', min: '', max: 999 },
     { label: '₹1,000 – 2,500', min: 1000, max: 2500 },
@@ -83,17 +83,30 @@
     toastTimer = setTimeout(function () { els.toast.hidden = true; }, bad ? 7000 : 3500);
   }
 
+  function headerIcon(name) {
+    var paths = {
+      heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+      studio: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      logout: '<path d="M9 4H4v16h5M14 8l4 4-4 4m-6-4h13"/>',
+      user: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+      calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-14 4h2m4 0h2m-8 3h2"/>'
+    };
+    return svgEl('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths[name] + '</svg>');
+  }
+
   /* ---------- shell ---------- */
   function build() {
     var app = document.getElementById('app');
     clear(app);
     els.toast = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite', hidden: true });
-    els.adminLogin = h('a', { class: 'btn', href: '#admin', text: 'Admin login' });
-    els.manage = h('button', { class: 'btn', type: 'button', hidden: true, onclick: function () { location.hash = route && route.name === 'admin' ? 'home' : 'admin'; } }, 'Manage store');
-    els.logout = h('button', { class: 'btn', type: 'button', hidden: true, text: 'Log out', onclick: function () {
+    els.adminLogin = h('a', { class: 'header-icon', href: '#admin', 'aria-label': 'Admin login', title: 'Admin login' }, headerIcon('user'));
+    els.wishlist = h('a', { class: 'header-icon', href: '#wishlist', 'aria-label': 'Wishlist', title: 'Wishlist' }, headerIcon('heart'));
+    els.calendar = h('a', { class: 'header-icon', href: '#diary', 'aria-label': 'Diary calendar', title: 'Diary calendar', hidden: true }, headerIcon('calendar'));
+    els.manage = h('button', { class: 'header-icon', type: 'button', hidden: true, 'aria-label': 'Manage store', title: 'Manage store', onclick: function () { ui.tab = 'items'; location.hash = route && route.name === 'admin' ? 'home' : 'admin'; } }, headerIcon('studio'));
+    els.logout = h('button', { class: 'header-icon', type: 'button', hidden: true, 'aria-label': 'Log out', title: 'Log out', onclick: function () {
       els.logout.disabled = true;
       api('POST', '/api/logout').then(function () {
-        isAdmin = false;
+        isAdmin = false; diaryState.cache = {}; wishlist.entries = null; wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
         location.hash = 'home';
         render(true);
       }).catch(function (e) {
@@ -101,6 +114,7 @@
         toast(e.message, true);
       });
     } });
+    els.logout.appendChild(headerIcon('logout'));
     els.search = h('input', {
       type: 'search', id: 'q', placeholder: 'Search pieces', 'aria-label': 'Search pieces',
       oninput: function () {
@@ -110,8 +124,8 @@
       }
     });
     var masthead = h('header', { class: 'masthead' },
-      h('a', { class: 'wordmark', href: '#home', text: 'Aakriti’s Wardrobe' }),
-      h('div', { class: 'head-tools' }, h('div', { class: 'search' }, els.search), els.adminLogin, els.manage, els.logout));
+      h('a', { class: 'wordmark', href: '#home', 'aria-label': 'Aakriti’s Wardrobe — home' }, h('img', { class: 'site-logo', src: '/logo.png', alt: '' }), h('span', { text: 'Aakriti’s Wardrobe' })),
+      h('div', { class: 'head-tools' }, h('div', { class: 'search' }, svgEl('<svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>'), els.search), els.adminLogin, els.wishlist, els.calendar, els.manage, els.logout));
     els.navList = h('ul');
     els.nav = h('nav', { class: 'catnav', 'aria-label': 'Categories' }, els.navList);
     els.main = h('main');
@@ -120,7 +134,16 @@
     app.appendChild(h('div', { class: 'wrap' }, masthead, els.nav, els.main, els.foot));
     app.appendChild(els.editor);
     app.appendChild(els.toast);
+    document.addEventListener('click', function (ev) {
+      var other = els.navList.querySelector('.nav-other');
+      if (other && !other.contains(ev.target)) other.open = false;
+    });
+    window.addEventListener('resize', function () {
+      var other = els.navList.querySelector('.nav-other');
+      if (other) other.open = false;
+    });
     document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { var other = els.navList.querySelector('.nav-other'); if (other && other.open) { other.open = false; other.querySelector('summary').focus(); } }
       if (ev.key === 'Escape' && document.body.classList.contains('filters-open')) document.body.classList.remove('filters-open');
     });
   }
@@ -131,10 +154,27 @@
     if (route.name === 'cat') cur = 'c-' + route.id;
     else if (route.name === 'item') { var it = itemById(route.id); if (it) cur = 'c-' + it.cat; }
     else if (route.name === 'home') cur = 'home';
-    var links = [{ t: 'home', n: 'Home' }].concat(state.categories.map(function (c) { return { t: 'c-' + c.id, n: c.name }; }));
+    var standard = ['lingerie', 'layering', 'topwear', 'bottomwear', 'dresses', 'nightwear', 'activewear', 'footwear'];
+    var primary = state.categories.filter(function (c) { return standard.indexOf(c.id) !== -1; });
+    var extra = state.categories.filter(function (c) { return standard.indexOf(c.id) === -1; });
+    var links = [{ t: 'home', n: 'Home' }].concat(primary.map(function (c) { return { t: 'c-' + c.id, n: c.name }; }));
     links.forEach(function (l) {
       els.navList.appendChild(h('li', null, h('a', { href: '#' + l.t, text: l.n, 'aria-current': cur === l.t ? 'page' : null })));
     });
+    if (extra.length) {
+      var active = extra.some(function (c) { return cur === 'c-' + c.id; });
+      var menu = h('div', { class: 'other-menu' }, extra.map(function (c) {
+        return h('a', { href: '#c-' + c.id, text: c.name, 'aria-current': cur === 'c-' + c.id ? 'page' : null, onclick: function () { dropdown.open = false; } });
+      }));
+      var dropdown = h('details', { class: 'nav-other', ontoggle: function () {
+        if (!dropdown.open) return;
+        var rect = dropdown.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 6) + 'px';
+        menu.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 232)) + 'px';
+        menu.style.maxHeight = Math.max(80, window.innerHeight - rect.bottom - 24) + 'px';
+      } }, h('summary', { class: active ? 'other-active' : '', text: 'Other', 'aria-label': 'Other categories' }), menu);
+      els.navList.appendChild(h('li', null, dropdown));
+    }
   }
 
   function renderFoot() {
@@ -147,7 +187,7 @@
     var t = (location.hash || '').replace(/^#/, '');
     if (t.indexOf('p-') === 0) return { name: 'item', id: t.slice(2), token: t };
     if (t.indexOf('c-') === 0) return { name: 'cat', id: t.slice(2), token: t };
-    if (t === 'new' || t === 'search' || t === 'admin') return { name: t, token: t };
+    if (t === 'new' || t === 'search' || t === 'admin' || t === 'wishlist' || t === 'diary') return { name: t, token: t };
     return { name: 'home', token: 'home' };
   }
 
@@ -172,13 +212,28 @@
         : pageMessage('That category isn’t here', 'Pick one from the menu above.');
     } else if (route.name === 'new') node = pageList({ name: 'new', title: 'New arrivals', crumbs: [['Home', '#home'], ['New arrivals']], base: function () { return state.items; }, emptyText: 'New pieces are on their way.' });
     else if (route.name === 'search') node = pageList({ name: 'search', title: 'Search', crumbs: [['Home', '#home'], ['Search']], base: function () { return state.items; }, emptyText: 'Nothing matches that search.' });
-    else if (route.name === 'admin') node = isAdmin ? pageAdmin() : pageLogin();
+    else if (route.name === 'admin' || route.name === 'wishlist') {
+      if (route.name === 'wishlist') ui.tab = 'wishlist';
+      if (route.name === 'wishlist' && !isAdmin) {
+        node = h('section', { class: 'public-wishlist' }, h('p', { class: 'eyebrow', text: 'SOMETHING FOR LATER' }), h('h1', { text: 'Aakriti’s wishlist' }), h('p', { class: 'studio-description', text: 'A little collection of things I’m thinking about.' }));
+        adminWishlist(node);
+      } else node = isAdmin ? pageAdmin() : pageLogin();
+    }
+    else if (route.name === 'diary') node = isAdmin ? pageDiary() : pageLogin();
     else node = pageHome();
     els.main.appendChild(node);
     document.body.classList.toggle('on-home', route.name === 'home');
+    document.body.classList.toggle('on-item', route.name === 'item');
+    document.body.classList.toggle('on-diary', route.name === 'diary' && isAdmin);
+    document.body.classList.toggle('on-list', ['cat', 'new', 'search'].indexOf(route.name) !== -1);
     els.adminLogin.hidden = isAdmin;
     els.manage.hidden = !isAdmin;
-    els.manage.textContent = route.name === 'admin' ? 'View store' : 'Manage store';
+    els.wishlist.hidden = false;
+    els.wishlist.setAttribute('aria-current', route.name === 'wishlist' ? 'page' : 'false');
+    els.calendar.hidden = !isAdmin;
+    els.calendar.setAttribute('aria-current', route.name === 'diary' ? 'page' : 'false');
+    els.manage.setAttribute('aria-label', route.name === 'admin' ? 'View store' : 'Manage store');
+    els.manage.title = route.name === 'admin' ? 'View store' : 'Manage store';
     els.logout.hidden = !isAdmin;
     els.logout.disabled = false;
     document.title = pageTitle();
@@ -191,6 +246,8 @@
     if (route.name === 'item') { var it = itemById(route.id); return it ? it.name + ' · ' + base : base; }
     if (route.name === 'cat') { var c = catById(route.id); return c ? c.name + ' · ' + base : base; }
     if (route.name === 'new') return 'New arrivals · ' + base;
+    if (route.name === 'wishlist') return 'Wishlist · ' + base;
+    if (route.name === 'diary') return 'Diary calendar · ' + base;
     return base;
   }
 
@@ -237,29 +294,25 @@
 
   /* ---------- home ---------- */
   function pageHome() {
-    var f = document.createDocumentFragment();
-    var title = h('h1', { text: 'Aakriti’s Wardrobe' });
     var exploreHref = state.categories[0] ? '#c-' + state.categories[0].id : '#new';
-    f.appendChild(h('section', { class: 'home-hero' },
-      h('div', { class: 'hero-clothing', 'aria-hidden': 'true' },
-        h('div', { class: 'clothing-sketch sketch-top' },
-          svgEl('<svg viewBox="0 0 300 340"><defs><linearGradient id="blouse-fabric" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f6c6d5"/><stop offset=".48" stop-color="#d985a2"/><stop offset="1" stop-color="#ad5275"/></linearGradient><linearGradient id="blouse-sleeve" x1="0" y1="0" x2="0.9" y2="1"><stop stop-color="#f8dce5"/><stop offset="1" stop-color="#d990aa"/></linearGradient></defs><path d="m107 53 19-19h48l19 19 42 16 43 24-29 67-38-20v163H89V140l-38 20-29-67 43-24 42-16z" fill="url(#blouse-fabric)" stroke="currentColor" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round"/><path d="m107 53-42 16-30 55 30 20 27-23-3 119c21 9 41 13 58 13V57l-40-4zm86 0 42 16 30 55-30 20-27-23 3 119c-21 9-41 13-58 13V57l40-4z" fill="url(#blouse-sleeve)" fill-opacity=".75" stroke="currentColor" stroke-opacity=".52" stroke-width="1.7" stroke-linejoin="round"/><path d="m107 53 19-19 24 17 24-17 19 19-22 36-21-18-21 18-22-36z" fill="#f6dce4" fill-opacity=".85" stroke="currentColor" stroke-opacity=".72" stroke-width="2" stroke-linejoin="round"/><path d="m126 34 24 17 24-17m-24 17v236m-35-177-16 14m91-14 16 14m-80 78c20 8 39 8 59 0m-59 20c20 8 39 8 59 0m-59 20c20 8 39 8 59 0m-58 22c19 7 38 7 57 0" fill="none" stroke="#fff0f4" stroke-opacity=".76" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M150 110v5m0 23v5m0 23v5m0 23v5m0 23v5m0 23v5" stroke="#78334f" stroke-width="4" stroke-linecap="round"/><path d="M91 278c39 12 79 12 118 0" fill="none" stroke="#7d3c58" stroke-opacity=".55" stroke-width="2"/><path d="M49 97 34 105l17 37m201-45 15 8-17 37" fill="none" stroke="#fff0f4" stroke-opacity=".72" stroke-width="2" stroke-linecap="round"/></svg>')),
-        h('div', { class: 'clothing-sketch sketch-bra' },
-          svgEl('<svg viewBox="0 0 320 240"><defs><linearGradient id="bra-cup" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#f6d4df"/><stop offset=".55" stop-color="#df9ab2"/><stop offset="1" stop-color="#bd6e8b"/></linearGradient><linearGradient id="bra-band" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d78ba5"/><stop offset="1" stop-color="#a94e70"/></linearGradient></defs><path d="m92 47 19-22 31 7 18 40 18-40 31-7 19 22 24 12-18 35-27-13-6 39c-16 17-33 24-51 24s-35-7-51-24l-6-39-27 13-18-35 24-12z" fill="none" stroke="currentColor" stroke-opacity=".7" stroke-width="2.2" stroke-linejoin="round"/><path d="m98 53 33 8c15 4 24 19 27 42 2 17-3 34-14 47-8 9-19 13-31 11-23-4-41-22-48-49l-8-33 41-26z" fill="url(#bra-cup)" stroke="currentColor" stroke-opacity=".72" stroke-width="2.4" stroke-linejoin="round"/><path d="m222 53-33 8c-15 4-24 19-27 42-2 17 3 34 14 47 8 9 19 13 31 11 23-4 41-22 48-49l8-33-41-26z" fill="url(#bra-cup)" stroke="currentColor" stroke-opacity=".72" stroke-width="2.4" stroke-linejoin="round"/><path d="M106 59c5 25 9 51 15 78 2 9 5 16 10 23m83-101c-5 25-9 51-15 78-2 9-5 16-10 23M160 116v25" fill="none" stroke="#fff0f4" stroke-opacity=".8" stroke-width="2.1" stroke-linecap="round"/><path d="M68 137c22 19 49 29 92 29s70-10 92-29l12 29c-27 21-61 31-104 31s-77-10-104-31l12-29z" fill="url(#bra-band)" stroke="currentColor" stroke-opacity=".75" stroke-width="2.2" stroke-linejoin="round"/><path d="M80 151c22 18 48 26 80 26s58-8 80-26m-159 22c23 17 49 25 79 25s56-8 79-25" fill="none" stroke="#fff0f4" stroke-opacity=".8" stroke-width="1.7"/><path d="M87 159c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0m26 0c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0" fill="none" stroke="#fff0f4" stroke-opacity=".9" stroke-width="1.6" stroke-linecap="round"/><path d="m111 28 11 29m87-29-11 29m-83 4 8 8m-5-15 9 8m96-1-8 8m5-15-9 8" fill="none" stroke="#fff0f4" stroke-opacity=".85" stroke-width="2" stroke-linecap="round"/><path d="M155 165v14m10-14v14" stroke="#79374f" stroke-width="2" stroke-linecap="round"/></svg>'))),
+    return h('section', { class: 'home-hero' },
+      h('div', { class: 'hero-atmosphere', 'aria-hidden': 'true' },
+        h('span', { class: 'silk silk-one' }), h('span', { class: 'silk silk-two' }), h('span', { class: 'silk silk-three' })),
       h('div', { class: 'home-intro' },
-        h('p', { class: 'hero-eyebrow' }, h('span', { text: 'A' }), ' PERSONAL WARDROBE'),
-        title,
-        h('p', { class: 'lead' },
-          h('span', { text: "Aakriti's curated collection of her finest feminine essentials," }),
-          h('span', { text: 'and an exclusive catalogue of her personal and intimate wardrobe.' })),
-        h('a', { class: 'btn primary hero-cta', href: exploreHref }, 'Browse the wardrobe', h('span', { 'aria-hidden': 'true', text: '↗' })))));
-    return f;
+        h('p', { class: 'hero-eyebrow', text: 'A PRIVATE EDIT · AAKRITI’S WARDROBE' }),
+        h('h1', null, 'A little world,', h('em', { text: ' entirely mine.' })),
+        h('p', { class: 'lead', text: state.settings.tagline || 'The pieces I love. The details I keep coming back to. A personal wardrobe, thoughtfully collected.' }),
+        h('a', { class: 'btn primary hero-cta', href: exploreHref }, 'Explore my wardrobe', h('span', { 'aria-hidden': 'true', text: '→' }))),
+      h('div', { class: 'hero-index' },
+        h('a', { class: 'about-aakriti', href: 'https://beingaakriti.in', target: '_blank', rel: 'noopener noreferrer' }, 'About Aakriti ', h('span', { 'aria-hidden': 'true', text: '→' })),
+        h('span', { text: 'THE PERSONAL COLLECTION / A.W.' })));
   }
 
   /* ---------- list pages ---------- */
   function pageList(o) {
     var f = document.createDocumentFragment();
-    f.appendChild(crumbs(o.crumbs));
+    var catalogHeading = h('header', { class: 'catalog-heading' }, crumbs(o.crumbs.slice(0, -1)));
+    f.appendChild(catalogHeading);
     var subEl = h('p');
     var selectedSubcategory = '';
     var subcategoryFilter = o.subcategories && o.subcategories.length ? h('select', {
@@ -269,9 +322,10 @@
     }, h('option', { value: '', text: 'All subcategories' }), o.subcategories.map(function (s) {
       return h('option', { value: s.id, text: s.name });
     })) : null;
-    f.appendChild(h('div', { class: 'list-head' }, h('h2', { text: o.title }), subEl));
+    catalogHeading.appendChild(h('div', { class: 'list-head category-heading' }, h('h2', { text: o.title }), subEl));
 
     var count = h('p', { class: 'count', 'aria-live': 'polite' });
+    catalogHeading.appendChild(count);
     var active = h('div', { class: 'active' });
     var grid = h('div', { class: 'grid' });
     var badge = h('span', { class: 'badge-n', hidden: true });
@@ -356,7 +410,7 @@
 
     f.appendChild(h('div', { class: 'shop nofilter' },
       h('section', { class: 'results', 'aria-label': 'Pieces' },
-        h('div', { class: 'toolbar' }, count, h('div', { class: 'tb-right' },
+        h('div', { class: 'toolbar' }, h('div', { class: 'tb-right' },
           subcategoryFilter, sort, filterMenu)),
         active, grid)));
     buildFilters(); refresh();
@@ -365,13 +419,6 @@
   }
 
   /* ---------- item page ---------- */
-  function recommend(it) {
-    var same = state.items.filter(function (x) { return x.id !== it.id && x.cat === it.cat; })
-      .sort(function (a, b) { return Math.abs(a.price - it.price) - Math.abs(b.price - it.price); });
-    var rest = state.items.filter(function (x) { return x.id !== it.id && x.cat !== it.cat; }).sort(newest);
-    return same.concat(rest).slice(0, 8);
-  }
-
   function pageItem(it) {
     if (!it) return pageMessage('This piece isn’t available', 'It may have been removed. Browse the categories to see what’s in.');
     var f = document.createDocumentFragment();
@@ -422,12 +469,6 @@
         actions, linkSlot)));
     show(0);
 
-    var recs = recommend(it);
-    if (recs.length) {
-      f.appendChild(h('section', { class: 'recs', 'aria-label': 'Recommended pieces' },
-        h('div', { class: 'sec-head', style: 'margin-top:0' }, h('h2', { text: 'You may also like' }), c ? h('a', { class: 'link', href: '#c-' + c.id, text: 'More ' + c.name }) : null),
-        h('div', { class: 'grid four' }, recs.map(card))));
-    }
     return f;
   }
 
@@ -442,25 +483,197 @@
       api('POST', '/api/login', { password: pw.value }).then(function () { isAdmin = true; render(true); })
         .catch(function (e) { go.disabled = false; msg.textContent = e.message; pw.select(); });
     } },
-      h('h2', { text: 'Admin login' }),
+      h('p', { class: 'eyebrow', text: 'JUST FOR YOU' }),
+      h('h2', { text: 'Welcome back, Aakriti' }),
+      h('p', { class: 'hint', text: 'Your wardrobe is waiting for you.' }),
       h('div', { class: 'field' }, h('label', { for: 'adm-pw', text: 'Password' }), pw),
       msg, h('div', null, go));
-    return form;
+    return h('section', { class: 'studio-login' },
+      h('div', { class: 'login-welcome' },
+        h('p', { class: 'eyebrow', text: 'THE WARDROBE STUDIO' }),
+        h('h1', null, 'Your collection.', h('em', { text: ' Your own little space.' })),
+        h('p', { text: 'Come in, make yourself at home, and give your favourite pieces a place to live.' }),
+        h('a', { class: 'link', href: '#home', text: '← Back to wardrobe' })),
+      h('div', { class: 'login-form-area' }, form));
   }
 
   function pageAdmin() {
-    var a = h('section', { class: 'admin', 'aria-label': 'Manage store' });
-    a.appendChild(h('div', { class: 'admin-head' },
-      h('h2', { text: 'Manage store' }),
-      ui.tab === 'items' ? h('button', { class: 'btn primary', type: 'button', onclick: function () { openEditor(null); }, text: 'Add item' }) : null));
-    var tabs = [['items', 'Items (' + state.items.length + ')'], ['cats', 'Categories'], ['settings', 'Store details']];
-    a.appendChild(h('div', { class: 'tabs', role: 'tablist' }, tabs.map(function (t) {
-      return h('button', { type: 'button', role: 'tab', 'aria-current': ui.tab === t[0] ? 'true' : 'false', text: t[1], onclick: function () { ui.tab = t[0]; render(true); } });
+    if (ui.tab !== 'items' && ui.tab !== 'cats' && ui.tab !== 'import' && ui.tab !== 'wishlist') ui.tab = 'items';
+    var a = h('section', { class: 'admin admin-workspace' + (ui.tab === 'import' ? ' import-workspace' : ''), 'aria-label': 'Manage store' });
+    var sidebar = h('aside', { class: 'admin-sidebar' },
+      h('p', { class: 'eyebrow', text: 'YOUR PRIVATE SPACE' }),
+      h('h2', { text: 'Wardrobe studio' }),
+      h('p', { class: 'hint', text: 'A little room for everything you love.' }));
+    var tabs = [['items', 'My pieces', state.items.length], ['cats', 'Categories', state.categories.length], ['wishlist', 'Wishlist', wishlist.entries ? wishlist.entries.length : '♡'], ['import', 'Import from link', '→']];
+    sidebar.appendChild(h('div', { class: 'studio-nav', role: 'tablist', 'aria-label': 'Manage wardrobe' }, tabs.map(function (t) {
+      return h('button', { type: 'button', role: 'tab', 'aria-selected': ui.tab === t[0] ? 'true' : 'false', 'aria-controls': 'studio-panel', id: 'studio-' + t[0], onclick: function () { ui.tab = t[0]; if (t[0] === 'wishlist') location.hash = 'wishlist'; else if (route.name === 'wishlist') location.hash = 'admin'; render(true); } },
+        h('span', { text: t[1] }), h('span', { class: 'studio-count', text: String(t[2]) }));
     })));
-    if (ui.tab === 'items') adminItems(a);
-    else if (ui.tab === 'cats') adminCats(a);
-    else adminSettings(a);
+    sidebar.appendChild(h('a', { class: 'studio-back', href: '#home', text: '← Back to wardrobe' }));
+    var content = h('div', { class: 'studio-content', id: 'studio-panel', role: 'tabpanel', 'aria-labelledby': 'studio-' + ui.tab });
+    content.appendChild(h('div', { class: 'admin-head' },
+      h('div', null, h('p', { class: 'eyebrow', text: ui.tab === 'wishlist' ? 'SOMETHING FOR LATER' : ui.tab === 'import' ? 'FOUND SOMETHING YOU LOVE?' : ui.tab === 'items' ? 'COLLECTED & CURATED' : 'A PLACE FOR EVERY PIECE' }),
+        h('h1', { text: ui.tab === 'wishlist' ? 'My wishlist' : ui.tab === 'import' ? 'Import from link' : ui.tab === 'items' ? 'My pieces' : 'Your categories' }),
+        h('p', { class: 'studio-description', text: ui.tab === 'wishlist' ? 'Save the pieces you’re thinking about. Just a title and a link, until you’re ready.' : ui.tab === 'import' ? 'Paste a webpage link, choose your photos, then make the piece your own.' : ui.tab === 'items' ? 'Your collection, all in one place. Add, edit and revisit your favourites.' : 'Organise your wardrobe with categories and subcategories.' })),
+      ui.tab === 'items' ? h('div', { class: 'studio-header-actions' }, h('button', { class: 'btn', type: 'button', text: 'Import from link', onclick: function () { ui.tab = 'import'; render(true); } }), h('button', { class: 'btn primary', type: 'button', onclick: function () { openEditor(null); }, text: '+ Add item' })) : null));
+    if (ui.tab === 'import') {
+      var caption = content.querySelector('.studio-description');
+      clear(caption);
+      caption.appendChild(h('span', { class: 'import-caption-full', text: 'Paste a webpage link, choose your photos, then make the piece your own.' }));
+      caption.appendChild(h('span', { class: 'import-caption-short', text: 'Paste a link. Pick photos. Make it yours.' }));
+    }
+    if (ui.tab === 'items') {
+      adminItems(content);
+    } else if (ui.tab === 'wishlist') adminWishlist(content);
+    else if (ui.tab === 'import') adminImport(content);
+    else adminCats(content);
+    a.appendChild(sidebar); a.appendChild(content);
     return a;
+  }
+
+  var wishlist = { entries: null, loading: false, error: '' };
+  var wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
+  function loadWishlist() {
+    if (wishlist.loading) return;
+    wishlist.loading = true; wishlist.error = '';
+    api('GET', '/api/wishlist').then(function (result) { wishlist.entries = result.entries; })
+      .catch(function (e) { wishlist.error = e.message; }).then(function () {
+        wishlist.loading = false;
+        if (route.name === 'wishlist' || (isAdmin && route.name === 'admin' && ui.tab === 'wishlist')) render(true);
+      });
+  }
+  function adminWishlist(a) {
+    if (!wishlist.entries && !wishlist.loading && !wishlist.error) loadWishlist();
+    var draft = wishlistDraft;
+    var title = h('input', { type: 'text', id: 'wish-title', value: draft.title, placeholder: 'The linen dress I loved', maxlength: 100, required: true, disabled: draft.saving, oninput: function () { draft.title = title.value; } });
+    var url = h('input', { type: 'url', id: 'wish-url', value: draft.url, placeholder: 'https://example.com/product', required: true, disabled: draft.saving, oninput: function () { draft.url = url.value; } });
+    var form = h('form', { class: 'wishlist-form panel', onsubmit: function (ev) {
+      ev.preventDefault();
+      if (draft.saving) return;
+      draft.saving = true; draft.error = ''; render(true);
+      api(draft.id ? 'PUT' : 'POST', '/api/wishlist' + (draft.id ? '/' + encodeURIComponent(draft.id) : ''), { title: draft.title, url: draft.url })
+        .then(function (entry) {
+          if (wishlist.entries) {
+            if (draft.id) wishlist.entries = wishlist.entries.map(function (it) { return it.id === entry.id ? entry : it; });
+            else wishlist.entries.unshift(entry);
+          }
+          wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
+          toast(draft.id ? 'Wishlist entry updated' : 'Saved to your wishlist'); render(true);
+          if (!wishlist.entries) loadWishlist();
+        }).catch(function (e) { draft.saving = false; draft.error = e.message; render(true); });
+    } },
+      h('h2', { text: draft.id ? 'Edit saved idea' : 'Save something for later' }),
+      h('div', { class: 'wishlist-fields' },
+        h('div', { class: 'field' }, h('label', { for: 'wish-title', text: 'Title' }), title),
+        h('div', { class: 'field' }, h('label', { for: 'wish-url', text: 'Link' }), url)),
+      draft.error ? h('p', { class: 'err', role: 'alert', text: draft.error }) : null,
+      h('div', { class: 'wishlist-form-actions' },
+        draft.id ? h('button', { class: 'btn', type: 'button', disabled: draft.saving, text: 'Cancel editing', onclick: function () { wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' }; render(true); } }) : null,
+        h('button', { class: 'btn primary', type: 'submit', disabled: draft.saving, text: draft.saving ? 'Saving…' : draft.id ? 'Save changes' : '+ Save to wishlist' })));
+    if (isAdmin) a.appendChild(form);
+    if (wishlist.loading) a.appendChild(h('p', { class: 'hint', role: 'status', text: 'Loading your saved ideas…' }));
+    if (wishlist.error) a.appendChild(h('div', { class: 'wishlist-error' }, h('p', { class: 'err', role: 'alert', text: wishlist.error }), h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { loadWishlist(); render(true); } })));
+    if (!wishlist.entries) return;
+    if (!wishlist.entries.length) {
+      a.appendChild(h('div', { class: 'wishlist-empty' }, h('span', { class: 'wishlist-heart', 'aria-hidden': 'true', text: '♡' }), h('h2', { text: 'Room for a little inspiration' }), h('p', { text: isAdmin ? 'Save a link above. Photos, price and category can wait until you add it to your wardrobe.' : 'Nothing saved yet. Check back for new ideas.' })));
+      return;
+    }
+    if (isAdmin) a.appendChild(h('p', { class: 'hint', text: 'Add to wardrobe opens an item draft with the title and link filled in. Your wish stays here until the item is saved.' }));
+    var list = h('div', { class: 'wishlist-list' });
+    wishlist.entries.forEach(function (entry) {
+      var host;
+      try { host = new URL(entry.url).hostname.replace(/^www\./, ''); } catch (e) { host = entry.url; }
+      var remove = h('button', { class: 'btn sm danger', type: 'button', text: 'Remove', onclick: function () {
+        if (remove.dataset.armed !== '1') { remove.dataset.armed = '1'; remove.textContent = 'Confirm remove'; setTimeout(function () { remove.dataset.armed = ''; remove.textContent = 'Remove'; }, 4000); return; }
+        remove.disabled = true;
+        api('DELETE', '/api/wishlist/' + encodeURIComponent(entry.id)).then(function () {
+          wishlist.entries = wishlist.entries.filter(function (it) { return it.id !== entry.id; });
+          if (wishlistDraft.id === entry.id) wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
+          toast('Removed from wishlist'); render(true);
+        }).catch(function (e) { remove.disabled = false; toast(e.message, true); });
+      } });
+      list.appendChild(h('article', { class: 'wishlist-row' },
+        h('div', { class: 'wishlist-info' }, h('h2', { text: entry.title }),
+          h('a', { href: entry.url, target: '_blank', rel: 'noopener noreferrer', text: host + ' →', 'aria-label': 'Open ' + entry.title + ' on ' + host })),
+        isAdmin ? h('div', { class: 'wishlist-actions' },
+          h('button', { class: 'btn sm', type: 'button', text: 'Edit', disabled: draft.saving, onclick: function () { wishlistDraft = { id: entry.id, title: entry.title, url: entry.url, saving: false, error: '' }; render(true); document.getElementById('wish-title').focus(); } }), remove,
+          h('button', { class: 'btn sm primary', type: 'button', text: 'Add to wardrobe →', onclick: function () { openEditor(null, null, { name: entry.title, source: entry.url, wishlistId: entry.id }); } })) : null));
+    });
+    a.appendChild(list);
+  }
+
+  var importDraft = { url: '', result: null, selected: [], scanning: false, preparing: false, error: '' };
+  function adminImport(a) {
+    var d = importDraft;
+    var busy = d.scanning || d.preparing;
+    var url = h('input', { type: 'url', id: 'import-url', placeholder: 'https://example.com/product', value: d.url, required: true, disabled: busy, oninput: function () { d.url = url.value; } });
+    var form = h('form', { class: 'import-form panel', onsubmit: function (ev) {
+      ev.preventDefault();
+      if (d.scanning || d.preparing) return;
+      d.scanning = true; d.error = ''; d.result = null; d.selected = []; render(true);
+      api('POST', '/api/import/scan', { url: d.url.trim() }).then(function (result) { d.result = result; })
+        .catch(function (e) { d.error = e.message; }).then(function () { d.scanning = false; render(true); });
+    } }, h('div', { class: 'field' }, h('label', { for: 'import-url', text: 'Webpage link' }), url),
+      h('button', { class: 'btn primary', type: 'submit', disabled: busy, text: d.scanning ? 'Finding photos…' : 'Find photos' }),
+      h('p', { class: 'hint', text: 'Works with public pages. Some sites block imports or load photos only after the page opens. You can always upload photos manually.' }));
+    a.appendChild(form);
+    if (d.error) a.appendChild(h('p', { class: 'err', role: 'alert', text: d.error }));
+    if (busy) a.appendChild(h('p', { class: 'hint', role: 'status', text: d.scanning ? 'Reading the webpage and looking for images…' : 'Preparing your selected photos…' }));
+    if (!d.result) return;
+    if (!d.result.images.length) {
+      a.appendChild(h('div', { class: 'import-empty' }, h('h2', { text: 'No photos found' }), h('p', { text: 'Try the direct product page, or add the photos yourself.' }),
+        h('button', { class: 'btn', text: 'Add item manually', type: 'button', onclick: function () { openEditor(null, null, { source: d.result.source, name: d.result.name, price: d.result.price }); } })));
+      return;
+    }
+    var grid = h('div', { class: 'import-grid' });
+    var count = h('span', { class: 'hint', text: d.selected.length + ' of 10 photos selected' });
+    var use = h('button', { class: 'btn primary', type: 'button', disabled: busy || !d.selected.length, text: 'Use selected photos', onclick: function () {
+      if (d.preparing || !d.selected.length) return;
+      d.preparing = true; d.error = '';
+      var selected = d.selected.slice(), result = d.result;
+      render(true);
+      var files = [], failures = 0, chain = Promise.resolve();
+      selected.forEach(function (id) {
+        chain = chain.then(function () {
+          var photo = result.images.find(function (entry) { return entry.id === id; });
+          return fetch(photo.preview, { credentials: 'same-origin' }).then(function (r) {
+            if (!r.ok) return r.json().catch(function () { return {}; }).then(function (data) { throw new Error(data.error || 'Could not download that photo.'); });
+            return r.blob();
+          }).then(function (blob) { files.push(new File([blob], 'import-' + (id + 1), { type: blob.type })); })
+            .catch(function () { failures++; });
+        });
+      });
+      chain.then(function () {
+        d.preparing = false;
+        if (!files.length) d.error = 'Could not download the selected photos. Try different photos or upload them manually.';
+        render(true);
+        if (files.length) {
+          openEditor(null, null, { files: files, source: result.source, name: result.name, price: result.price });
+          if (failures) toast(failures + ' photos could not be imported. The other photos are ready.', true);
+        }
+      });
+    } });
+    a.appendChild(h('div', { class: 'import-result-heading' }, h('div', null,
+      h('h2', { text: 'Choose your photos' }), h('p', { class: 'hint', text: 'Select up to 10. You can reorder or remove them in the item editor.' })), count));
+    d.result.images.forEach(function (photo, index) {
+      var checkbox = h('input', { type: 'checkbox', checked: d.selected.indexOf(photo.id) !== -1, disabled: busy, 'aria-label': 'Select photo ' + (index + 1), onchange: function () {
+        if (checkbox.checked) {
+          if (d.selected.length >= 10) { checkbox.checked = false; toast('Select up to 10 photos.', true); return; }
+          d.selected.push(photo.id);
+        } else d.selected = d.selected.filter(function (id) { return id !== photo.id; });
+        count.textContent = d.selected.length + ' of 10 photos selected'; use.disabled = !d.selected.length;
+      } });
+      var label = h('label', { class: 'import-photo' }, checkbox,
+        h('img', { src: photo.preview, alt: 'Photo ' + (index + 1) + ' from webpage', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () {
+          checkbox.disabled = true; checkbox.checked = false;
+          d.selected = d.selected.filter(function (id) { return id !== photo.id; });
+          count.textContent = d.selected.length + ' of 10 photos selected'; use.disabled = busy || !d.selected.length;
+          label.classList.add('unavailable');
+        } }), h('span', { class: 'import-photo-caption', text: 'Photo ' + (index + 1) }));
+      grid.appendChild(label);
+    });
+    a.appendChild(grid);
+    a.appendChild(h('div', { class: 'category-save-bar' }, h('p', { class: 'hint', text: 'Nothing is saved until you confirm the item details.' }), use));
   }
 
   function adminItems(a) {
@@ -477,7 +690,7 @@
       a.appendChild(h('div', { class: 'empty' }, h('h2', { text: 'No items yet' }), h('p', { text: 'Add your first piece with a photo, name, category and price.' })));
       return;
     }
-    var rows = h('div', { class: 'rows' });
+    var rows = h('div', { class: 'rows studio-items' });
     state.items.slice().sort(newest).forEach(function (it) {
       var c = catById(it.cat);
       var th = h('div', { class: 'thumb' });
@@ -502,43 +715,51 @@
   function adminCats(a) {
     if (!catDraft) catDraft = clone(state.categories);
     var msg = h('p', { class: 'err', role: 'alert' });
-    var box = h('div', { class: 'rows' });
+    var box = h('div', { class: 'rows simple-categories' });
     catDraft.forEach(function (c, i) {
       c.subcategories = c.subcategories || [];
-      var inp = h('input', { type: 'text', value: c.name, 'aria-label': 'Category name', id: 'cat-' + i, oninput: function () { c.name = inp.value; } });
+      var inp = h('input', { type: 'text', value: c.name, 'aria-label': 'Category name', id: 'cat-' + i, oninput: function () { c.name = inp.value; var summary = inp.closest('details').querySelector('.category-summary-name'); summary.textContent = c.name || 'Untitled category'; } });
       var used = state.items.filter(function (it) { return it.cat === c.id; }).length;
       var childRows = h('div', { class: 'subcategory-rows' });
+      if (!c.subcategories.length) childRows.appendChild(h('p', { class: 'subcategory-empty', text: 'No subcategories yet. Add one below to group similar pieces.' }));
       c.subcategories.forEach(function (sub, j) {
         var subInput = h('input', { type: 'text', value: sub.name, 'aria-label': c.name + ' subcategory name', oninput: function () { sub.name = subInput.value; } });
         var subUsed = state.items.filter(function (it) { return it.subcat === sub.id; }).length;
         childRows.appendChild(h('div', { class: 'subcategory-row' },
           h('div', { class: 'field' }, subInput, subUsed ? h('span', { class: 'hint', text: subUsed + (subUsed === 1 ? ' item' : ' items') }) : null),
-          h('button', { class: 'btn sm danger', type: 'button', text: 'Remove', onclick: function () {
+          h('button', { class: 'sub-remove', type: 'button', text: '×', 'aria-label': 'Remove ' + sub.name, title: 'Remove subcategory', onclick: function () {
             if (subUsed) { msg.textContent = '“' + sub.name + '” still has items assigned. Reassign them first.'; return; }
             c.subcategories.splice(j, 1); render(true);
           } })));
       });
       var subInput = h('input', { type: 'text', placeholder: 'New subcategory', 'aria-label': 'New subcategory for ' + c.name });
-      var addSub = h('button', { class: 'btn sm', type: 'button', text: 'Add subcategory', onclick: function () {
+      var addSub = h('button', { class: 'btn sm', type: 'button', text: '+ Add', onclick: function () {
         var name = subInput.value.trim();
         if (!name) return;
         c.subcategories.push({ id: '', name: name }); render(true);
       } });
       subInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); addSub.click(); } });
-      box.appendChild(h('div', { class: 'category-admin-card' },
+      box.appendChild(h('details', { class: 'category-admin-card', name: 'category-editors', open: !!(ui.categoryOpen && ui.categoryOpen[c.id]), ontoggle: function (ev) { ui.categoryOpen = ui.categoryOpen || {}; ui.categoryOpen[c.id] = ev.currentTarget.open; } },
+        h('summary', { class: 'category-summary' },
+          h('span', { class: 'category-order', text: String(i + 1).padStart(2, '0') }),
+          h('span', { class: 'category-summary-name', text: c.name }),
+          h('span', { class: 'category-meta', text: used + (used === 1 ? ' piece' : ' pieces') }),
+          h('span', { class: 'category-edit-label', text: 'Edit' })),
+        h('div', { class: 'category-editor' },
         h('div', { class: 'cat-row' },
-        h('div', { class: 'field' }, inp, used ? h('span', { class: 'hint', text: used + (used === 1 ? ' item' : ' items') }) : null),
-        h('div', { class: 'acts' },
-          h('button', { class: 'btn sm', type: 'button', 'aria-label': 'Move up', disabled: i === 0, onclick: function () { catDraft.splice(i - 1, 0, catDraft.splice(i, 1)[0]); render(true); }, text: '↑' }),
-          h('button', { class: 'btn sm', type: 'button', 'aria-label': 'Move down', disabled: i === catDraft.length - 1, onclick: function () { catDraft.splice(i + 1, 0, catDraft.splice(i, 1)[0]); render(true); }, text: '↓' }),
+        h('div', { class: 'field' }, h('label', { for: 'cat-' + i, text: 'Category name' }), inp),
+        h('div', { class: 'acts category-tools' },
+          h('span', { class: 'category-order-label', text: 'Menu order' }),
+          h('button', { class: 'btn sm', type: 'button', 'aria-label': 'Move earlier', disabled: i === 0, onclick: function () { catDraft.splice(i - 1, 0, catDraft.splice(i, 1)[0]); render(true); }, text: '←' }),
+          h('button', { class: 'btn sm', type: 'button', 'aria-label': 'Move later', disabled: i === catDraft.length - 1, onclick: function () { catDraft.splice(i + 1, 0, catDraft.splice(i, 1)[0]); render(true); }, text: '→' }),
           h('button', { class: 'btn sm danger', type: 'button', text: 'Remove', onclick: function () {
             if (used) { msg.textContent = '“' + c.name + '” has ' + used + ' item' + (used === 1 ? '' : 's') + '. Move them to another category first.'; return; }
             catDraft.splice(i, 1); render(true);
           } }))),
         h('div', { class: 'category-subcategories' },
-          h('h3', { text: 'Subcategories' }),
+          h('div', { class: 'subcategory-heading' }, h('h3', { text: 'Subcategories' }), h('span', { text: String(c.subcategories.length) })),
           childRows,
-          h('div', { class: 'subcategory-add' }, subInput, addSub))));
+          h('div', { class: 'subcategory-add' }, subInput, addSub)))));
     });
     var newIn = h('input', { type: 'text', id: 'new-cat', placeholder: 'New category, for example Accessories', 'aria-label': 'New category name' });
     var addBtn = h('button', { class: 'btn', type: 'button', text: 'Add category', onclick: function () {
@@ -553,27 +774,11 @@
       api('PUT', '/api/categories', { categories: catDraft }).then(function () { catDraft = null; toast('Categories saved'); return reload(); })
         .catch(function (e) { save.disabled = false; save.textContent = 'Save categories'; msg.textContent = e.message; });
     } });
-    a.appendChild(h('p', { class: 'hint', text: 'Categories appear in the menu order. Add subcategories to organize items within each category.' }));
+    a.appendChild(h('p', { class: 'hint', text: 'Click a category to rename it, change its order or manage subcategories. Save when you’re done.' }));
     a.appendChild(box);
     a.appendChild(h('div', { class: 'panel' }, h('div', { class: 'field' }, h('label', { for: 'new-cat', text: 'Add a category' }), newIn), addBtn));
     a.appendChild(msg);
-    a.appendChild(h('div', null, save));
-  }
-
-  function adminSettings(a) {
-    var tag = h('input', { type: 'text', id: 'st-tag', value: state.settings.tagline || '', maxlength: 120 });
-    var wa = h('input', { type: 'tel', id: 'st-wa', value: state.settings.whatsapp || '', placeholder: '919876543210', inputmode: 'numeric' });
-    var msg = h('p', { class: 'err', role: 'alert' });
-    var save = h('button', { class: 'btn primary', type: 'button', text: 'Save details', onclick: function () {
-      save.disabled = true; save.textContent = 'Saving…'; msg.textContent = '';
-      api('PUT', '/api/settings', { tagline: tag.value, whatsapp: wa.value }).then(function () { toast('Store details saved'); return reload(); })
-        .catch(function (e) { save.disabled = false; save.textContent = 'Save details'; msg.textContent = e.message; });
-    } });
-    a.appendChild(h('div', { class: 'panel' },
-      h('div', { class: 'field' }, h('label', { for: 'st-tag', text: 'Headline on the home page' }), tag),
-      h('div', { class: 'field' }, h('label', { for: 'st-wa', text: 'WhatsApp number for enquiries' }), wa,
-        h('span', { class: 'hint', text: 'Include the country code, digits only. Leave empty to hide the Enquire button.' })),
-      msg, h('div', null, save)));
+    a.appendChild(h('div', { class: 'category-save-bar' }, h('span', { class: 'hint', text: 'Changes are applied when you save.' }), save));
   }
 
   /* ---------- item editor ---------- */
@@ -588,11 +793,12 @@
     }, function () { return Promise.reject(new Error('Could not read that photo.')); });
   }
 
-  function openEditor(item, presetCat) {
+  function openEditor(item, presetCat, imported) {
     var d = els.editor;
     var isEdit = !!item;
     var firstCat = presetCat && catById(presetCat) ? presetCat : (state.categories[0] ? state.categories[0].id : '');
     var draft = item ? { id: item.id, name: item.name, cat: item.cat, subcat: item.subcat || '', price: item.price, original_link: item.original_link || '' } : { id: '', name: '', cat: firstCat, subcat: '', price: '', original_link: '' };
+    if (imported && !item) { draft.name = imported.name || ''; draft.price = imported.price || ''; draft.original_link = imported.source || ''; }
     var photosList = item ? item.images.map(function (n) { return { f: n }; }) : [];
     var busy = 0;
     clear(d);
@@ -667,6 +873,7 @@
       fd.append('name', nm); fd.append('cat', draft.cat); fd.append('price', String(p));
       fd.append('subcat', draft.subcat || '');
       fd.append('original_link', draft.original_link || '');
+      if (!isEdit && imported && imported.wishlistId) fd.append('wishlist_id', imported.wishlistId);
       photosList.forEach(function (e) {
         if (e.f) order.push('f:' + e.f);
         else { order.push('n:' + n); fd.append('images', e.blob, 'photo-' + n + '.jpg'); n++; }
@@ -677,6 +884,10 @@
       req.then(function (res) {
         toast(isEdit ? 'Saved “' + nm + '”' : 'Added “' + nm + '”');
         closeEditor();
+        if (!isEdit && imported && imported.wishlistId) {
+          if (wishlist.entries) wishlist.entries = wishlist.entries.filter(function (entry) { return entry.id !== imported.wishlistId; });
+          if (wishlistDraft.id === imported.wishlistId) wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
+        }
         return reload().then(function () { if (!isEdit && res.id && route.name !== 'admin') location.hash = 'p-' + res.id; });
       }).catch(function (e) { saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save changes' : 'Add to catalogue'; err.textContent = e.message; });
     } });
@@ -698,6 +909,123 @@
         h('div', { class: 'grp' }, h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: closeEditor }), saveBtn)));
     drawPhotos();
     if (!d.open) d.showModal();
+    if (imported && imported.files) addFiles(imported.files);
+  }
+
+  var diaryState = { year: Number(DiaryCalendar.todayISO().slice(0, 4)), month: Number(DiaryCalendar.todayISO().slice(5, 7)) - 1, view: 'month', cache: {}, loading: {}, errors: {} };
+  var diaryMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var diaryLabels = { not_written: 'Not written', in_progress: 'In progress', written: 'Written' };
+  function loadDiary(year) {
+    if (diaryState.loading[year]) return;
+    diaryState.loading[year] = true; delete diaryState.errors[year];
+    api('GET', '/api/diary?year=' + year).then(function (data) { diaryState.cache[year] = data; })
+      .catch(function (e) { diaryState.errors[year] = e.message; if (e.status === 401) isAdmin = false; })
+      .then(function () { diaryState.loading[year] = false; if (route.name === 'diary') render(true); });
+  }
+  function pageDiary() {
+    var year = diaryState.year;
+    var data = diaryState.cache[year];
+    if (!data && !diaryState.loading[year] && !diaryState.errors[year]) loadDiary(year);
+    var today = data ? data.today : DiaryCalendar.todayISO();
+    var currentYear = Number(today.slice(0, 4));
+    var page = h('section', { class: 'diary-page', 'aria-label': 'Diary calendar' });
+    page.appendChild(h('div', { class: 'diary-heading' }, h('div', null,
+      h('p', { class: 'eyebrow', text: 'A LITTLE TIME FOR MYSELF' }), h('h1', { text: 'The Diary Calendar' }),
+      h('p', { class: 'studio-description', text: 'One day, one entry. Keep track of the moments you’ve put into words.' })),
+      h('a', { class: 'link', href: '#admin', text: '← Wardrobe studio' })));
+    var workspace = h('div', { class: 'diary-workspace' });
+    var sidebar = h('aside', { class: 'diary-sidebar', 'aria-label': 'Diary statistics' });
+    var calendar = h('div', { class: 'diary-calendar-panel' });
+    workspace.appendChild(sidebar); workspace.appendChild(calendar); page.appendChild(workspace);
+    var yearInput = h('select', { id: 'diary-year', 'aria-label': 'Calendar year', onchange: function () { diaryState.year = Number(yearInput.value); render(true); } },
+      Array.from({ length: currentYear - 2023 + 1 }, function (_, i) { var value = currentYear - i; return h('option', { value: value, selected: value === year, text: String(value) }); }));
+    var views = h('div', { class: 'calendar-views', role: 'group', 'aria-label': 'Calendar view' }, ['month', 'year'].map(function (view) {
+      return h('button', { class: 'btn', type: 'button', 'aria-pressed': diaryState.view === view ? 'true' : 'false', text: view === 'month' ? 'Monthly' : 'Yearly', onclick: function () { diaryState.view = view; render(true); } });
+    }));
+    calendar.appendChild(h('div', { class: 'diary-toolbar' }, views, h('div', { class: 'diary-period' }, h('label', { for: 'diary-year', text: 'Year' }), yearInput,
+      h('button', { class: 'btn', type: 'button', text: 'Today', onclick: function () { diaryState.year = currentYear; diaryState.month = Number(today.slice(5, 7)) - 1; diaryState.view = 'month'; render(true); } }))));
+    if (diaryState.loading[year]) calendar.appendChild(h('p', { class: 'hint', role: 'status', text: 'Loading your diary calendar…' }));
+    if (diaryState.errors[year]) calendar.appendChild(h('div', { class: 'wishlist-error' }, h('p', { class: 'err', role: 'alert', text: diaryState.errors[year] }),
+      h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { loadDiary(year); render(true); } })));
+    if (!data) return page;
+    var stats = DiaryCalendar.stats(year, data.entries, today);
+    var statCards = h('div', { class: 'diary-stats' });
+    function stat(value, label, note) { return h('div', { class: 'diary-stat' }, h('span', { text: label }), h('b', { text: String(value) }), h('small', { text: note })); }
+    if (stats.dayOfYear !== null) statCards.appendChild(stat(stats.dayOfYear, 'Day of ' + year, 'Today, in India time'));
+    statCards.appendChild(stat(stats.written, 'Days written in ' + year, 'Completed diary entries'));
+    statCards.appendChild(stat(stats.longestStreak, 'Longest streak', 'Consecutive written days in ' + year));
+    sidebar.appendChild(statCards);
+    sidebar.appendChild(h('div', { class: 'diary-legend' }, Object.keys(diaryLabels).map(function (status) {
+      return h('span', null, h('i', { class: 'status-dot status-' + status, 'aria-hidden': 'true' }), diaryLabels[status]);
+    }), h('span', null, h('i', { class: 'status-dot status-future', 'aria-hidden': 'true' }), 'Future')));
+    var dialog = h('dialog', { class: 'diary-dialog', 'aria-label': 'Update diary status' });
+    var focusDate = '';
+    function closeDialog() { dialog.close(); var day = document.getElementById('diary-' + focusDate); if (day) day.focus(); }
+    function editDate(date) {
+      focusDate = date; clear(dialog);
+      var status = data.entries[date] || 'not_written';
+      var saving = false;
+      var error = h('p', { class: 'err', role: 'alert' });
+      var buttons = [];
+      dialog.appendChild(h('button', { class: 'dlg-close', type: 'button', 'aria-label': 'Close diary editor', text: '×', onclick: function () { if (!saving) closeDialog(); } }));
+      dialog.appendChild(h('p', { class: 'eyebrow', text: 'A MOMENT TO CHECK IN' }));
+      dialog.appendChild(h('h2', { text: new Date(date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) }));
+      dialog.appendChild(h('p', { class: 'hint', text: 'How is your diary entry for this day?' }));
+      var choices = h('div', { class: 'diary-status-choices' });
+      Object.keys(diaryLabels).forEach(function (value) {
+        var button = h('button', { class: 'diary-status-choice status-' + value, type: 'button', 'aria-pressed': status === value ? 'true' : 'false', onclick: function () {
+          if (saving) return;
+          saving = true; error.textContent = ''; buttons.forEach(function (b) { b.disabled = true; });
+          api('PUT', '/api/diary/' + date, { status: value }).then(function () {
+            if (value === 'not_written') delete data.entries[date]; else data.entries[date] = value;
+            dialog.close(); render(true); var day = document.getElementById('diary-' + date); if (day) day.focus();
+            toast('Diary status saved');
+          }).catch(function (e) { saving = false; error.textContent = e.message; buttons.forEach(function (b) { b.disabled = false; }); });
+        } }, h('i', { class: 'status-dot status-' + value, 'aria-hidden': 'true' }), diaryLabels[value]);
+        buttons.push(button); choices.appendChild(button);
+      });
+      dialog.appendChild(choices); dialog.appendChild(error); dialog.showModal();
+      dialog.oncancel = function (ev) { if (saving) ev.preventDefault(); };
+    }
+    function monthCard(month, compact) {
+      var card = h('section', { class: 'diary-month' + (compact ? ' compact' : ''), 'aria-label': diaryMonths[month] + ' ' + year });
+      if (compact) card.appendChild(h('button', { class: 'month-title', type: 'button', text: diaryMonths[month], 'aria-label': 'Open ' + diaryMonths[month] + ' ' + year, onclick: function () { diaryState.month = month; diaryState.view = 'month'; render(true); } }));
+      var grid = h('div', { class: 'diary-days' });
+      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(function (day) { grid.appendChild(h('span', { class: 'diary-weekday', text: compact ? day[0] : day, 'aria-label': day })); });
+      for (var i = 0; i < DiaryCalendar.offset(year, month); i++) grid.appendChild(h('span', { class: 'diary-spacer', 'aria-hidden': 'true' }));
+      for (var number = 1; number <= DiaryCalendar.daysInMonth(year, month); number++) {
+        (function (day) {
+          var date = DiaryCalendar.key(year, month, day), future = date > today;
+          var status = data.entries[date] || 'not_written';
+          var label = day + ' ' + diaryMonths[month] + ' ' + year + ': ' + (future ? 'Future date' : diaryLabels[status]);
+          grid.appendChild(h('button', { class: 'diary-day status-' + (future ? 'future' : status) + (date === today ? ' is-today' : ''), id: 'diary-' + date, type: 'button', disabled: future, 'aria-label': label, 'aria-current': date === today ? 'date' : null, title: label,
+            onclick: function () { editDate(date); }, onkeydown: function (ev) {
+              var delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[ev.key];
+              if (!delta) return; var next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + delta);
+              var target = document.getElementById('diary-' + next.toISOString().slice(0, 10));
+              if (target && !target.disabled) { ev.preventDefault(); target.focus(); }
+            } }, h('span', { class: 'diary-day-number', text: String(day) }), compact ? null : h('span', { class: 'diary-day-label', text: future ? '' : diaryLabels[status] })));
+        })(number);
+      }
+      for (var trailing = DiaryCalendar.offset(year, month) + DiaryCalendar.daysInMonth(year, month); trailing < 42; trailing++) grid.appendChild(h('span', { class: 'diary-spacer', 'aria-hidden': 'true' }));
+      card.appendChild(grid); return card;
+    }
+    if (diaryState.view === 'month') {
+      var month = diaryState.month;
+      function move(delta) {
+        var next = new Date(Date.UTC(year, month + delta, 1)); diaryState.year = next.getUTCFullYear(); diaryState.month = next.getUTCMonth(); render(true);
+      }
+      calendar.appendChild(h('div', { class: 'diary-month-heading' },
+        h('button', { class: 'btn', type: 'button', 'aria-label': 'Previous month', text: '←', disabled: year === 2023 && month === 0, onclick: function () { move(-1); } }),
+        h('h2', { text: diaryMonths[month] + ' ' + year }),
+        h('button', { class: 'btn', type: 'button', 'aria-label': 'Next month', text: '→', disabled: year === currentYear && month === 11, onclick: function () { move(1); } })));
+      calendar.appendChild(monthCard(month, false));
+    } else {
+      calendar.appendChild(h('p', { class: 'hint diary-year-scroll-hint', text: 'Swipe through the months →' }));
+      calendar.appendChild(h('div', { class: 'diary-year-grid', tabindex: '0', 'aria-label': 'Months of the year. Scroll horizontally on smaller screens.' }, diaryMonths.map(function (_, month) { return monthCard(month, true); })));
+    }
+    sidebar.appendChild(h('p', { class: 'hint diary-help', text: 'Choose a day to update it. Streaks count written days in the selected year.' }));
+    page.appendChild(dialog); return page;
   }
 
   /* ---------- boot ---------- */

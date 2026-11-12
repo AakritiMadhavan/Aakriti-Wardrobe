@@ -47,3 +47,17 @@ CREATE TABLE IF NOT EXISTS item_images (
   position     integer NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS item_images_item_idx ON item_images (item_id, position);
+
+-- Private ideas saved for later; only exposed through authenticated endpoints.
+CREATE TABLE IF NOT EXISTS wishlist (
+  id         text PRIMARY KEY,
+  title      text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 100),
+  url        text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS diary_entries (
+  entry_date date PRIMARY KEY CHECK (entry_date >= DATE '2023-01-01'),
+  status text NOT NULL CHECK (status IN ('in_progress', 'written')),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);

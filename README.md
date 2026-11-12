@@ -126,3 +126,55 @@ Colours are CSS variables at the top of `public/app.css` (`--bg`, `--accent`, `-
 - The admin password is checked on the server. The login cookie is signed, `HttpOnly`, and marked secure in production. Login attempts are limited to 8 per 15 minutes per visitor address.
 - Uploaded files are accepted only if their contents are really JPG, PNG, WebP or GIF, whatever the file name says.
 - Only visitors who are logged in can add, change or delete anything.
+
+## Import photos from a webpage
+
+In **Manage store**, choose **Import from link** (also available next to Add item).
+Paste a public product-page URL, click **Find photos**, select up to ten photos,
+and click **Use selected photos**. Review the name, category, price and photos in
+the item editor, then save. The original webpage link is filled in automatically.
+No item is created until you save it.
+
+The importer reads HTML image tags, common lazy-loading attributes, responsive
+images, social preview images and Product JSON-LD. Names are suggested from page
+metadata; prices are suggested only when the source explicitly uses INR.
+Some sites block automated requests or only load images with JavaScript. For
+those sites, use manual photo upload. Preview links expire after 30 minutes;
+scan again if necessary. Supported imported images are JPG, PNG, WebP and GIF,
+up to 5 MB each, and the existing editor resizes them before saving.
+
+Imports require admin login. The server validates and pins public DNS addresses,
+rechecks redirects, and limits response sizes, request times and concurrency.
+It does not use browser cookies or sign in to the source website.
+
+Run the importer tests with `npm test`.
+
+## Wishlist
+
+Open **Wishlist** in the header to view it without logging in. Log in to add or edit entries. Save a title
+and webpage link without needing a photo, category or price. Entries can be
+edited, opened at their source, or removed.
+
+**Add to wardrobe →** opens the item editor with the saved title and original
+link. Add photos, a price and a category, then save. The wish is removed in the
+same database transaction as item creation. Cancelling or a failed save leaves
+it intact. Wishes persist in PostgreSQL. Viewing is public; adding, editing, removing and converting wishes requires admin login.
+
+## Diary calendar
+
+Log in and use the calendar icon in the header, or open `/#diary`. The calendar
+is private to the admin and supports monthly and yearly views from 2023 through
+the current year. Choose a past date or today to mark the diary entry **Not
+written** (red), **In progress** (yellow), or **Written** (green). Future dates
+are disabled. Statuses persist in PostgreSQL; no diary text is stored.
+
+Stats show the selected year's completed entries and longest consecutive streak
+of completed entries. The current day of the year appears only for the current
+year. In-progress and not-written dates break a streak. Calendar dates and the
+current day use Asia/Kolkata time.
+
+The webpage importer also reads product galleries from embedded JSON hydration
+data, including Nykaa and Next.js pages, plus inline background images and
+additional lazy-load attributes. It does not execute remote JavaScript or bypass
+website blocks. Up to 120 image candidates are offered, with up to ten selected
+for an item.
