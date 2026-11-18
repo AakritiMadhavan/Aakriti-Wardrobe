@@ -654,35 +654,38 @@
         .catch(function (e) { d.error = e.message; }).then(function () { d.scanning = false; render(true); });
     } }, h('div', { class: 'field' }, h('label', { for: 'import-url', text: 'Webpage link' }), url),
       h('button', { class: 'btn primary', type: 'submit', disabled: busy, text: d.scanning ? 'Finding photos…' : 'Find photos' }),
-      h('p', { class: 'hint', text: 'Works with public pages. Some sites block imports or load photos only after the page opens. You can always upload photos manually.' }));
+      h('p', { class: 'hint', text: 'Find product photos, then choose the ones you want to keep.' }));
     a.appendChild(form);
-    if (d.error) {
-      a.appendChild(h('p', { class: 'err', role: 'alert', text: d.error }));
+    if (d.error) a.appendChild(h('div', { class: 'import-feedback', role: 'alert' },
+      h('p', { class: 'err', text: d.error })));
+    if (d.error || (d.result && !d.result.images.length)) {
       var source = d.url.trim();
-      if (/^https?:\/\//i.test(source)) a.appendChild(h('div', { class: 'acts' },
-        h('a', { class: 'btn', href: source, target: '_blank', rel: 'noopener noreferrer', text: 'Open product page' }),
-        h('button', { class: 'btn', type: 'button', text: 'Add item manually', onclick: function () { openEditor(null, null, { source: source, importSession: d }); } })));
+      var fileInput = h('input', { class: 'import-html-input', type: 'file', id: 'import-html-file', accept: '.html,.htm,text/html', disabled: busy, 'aria-label': 'Choose saved webpage', onchange: function (ev) {
+        var file = ev.target.files[0];
+        if (!file || d.scanning || d.preparing) return;
+        if (!d.url.trim()) { d.error = 'Enter the original webpage link above first.'; render(true); return; }
+        if (file.size > 2 * 1024 * 1024) { d.error = 'Choose an HTML-only file smaller than 2 MB.'; render(true); return; }
+        var fd = new FormData(); fd.append('page', file); fd.append('url', d.url.trim());
+        d.scanning = true; d.error = ''; d.result = null; d.selected = []; render(true);
+        api('POST', '/api/import/html', fd).then(function (result) { d.result = result; })
+          .catch(function (e) { d.error = e.message; }).then(function () { d.scanning = false; render(true); });
+      } });
+      a.appendChild(h('details', { class: 'import-help' },
+        h('summary', { text: 'Other ways to add this piece' }),
+        h('div', { class: 'import-help-content' },
+          h('p', { class: 'hint', text: 'Open the product page to save photos yourself, or save the page as HTML only and import it here.' }),
+          h('div', { class: 'import-help-actions' },
+            /^https?:\/\//i.test(source) ? h('a', { class: 'btn', href: source, target: '_blank', rel: 'noopener noreferrer', text: 'Open product page' }) : null,
+            h('button', { class: 'btn', type: 'button', disabled: busy, text: 'Add manually', onclick: function () {
+              openEditor(null, null, { source: source, name: d.result ? d.result.name : '', price: d.result ? d.result.price : '', importSession: d });
+            } }),
+            h('button', { class: 'btn', type: 'button', disabled: busy, text: 'Import saved page', onclick: function () { fileInput.click(); } }), fileInput))));
     }
-    a.appendChild(h('details', { class: 'import-saved-page', open: !!d.error },
-      h('summary', { text: 'Import a saved webpage instead' }),
-      h('p', { class: 'hint', text: 'If a site blocks automatic imports: open the product page in your browser, save it as Webpage, HTML Only, then choose that .html file here. Keep the original link in the field above.' }),
-      h('label', { class: 'field' }, h('span', { text: 'Saved webpage (.html)' }),
-        h('input', { type: 'file', accept: '.html,.htm,text/html', disabled: busy, 'aria-label': 'Saved webpage HTML', onchange: function (ev) {
-          var file = ev.target.files[0];
-          if (!file || d.scanning || d.preparing) return;
-          if (!d.url.trim()) { d.error = 'Enter the original webpage link above first.'; render(true); return; }
-          if (file.size > 2 * 1024 * 1024) { d.error = 'Choose an HTML-only file smaller than 2 MB.'; render(true); return; }
-          var fd = new FormData(); fd.append('page', file); fd.append('url', d.url.trim());
-          d.scanning = true; d.error = ''; d.result = null; d.selected = []; render(true);
-          api('POST', '/api/import/html', fd).then(function (result) { d.result = result; })
-            .catch(function (e) { d.error = e.message; }).then(function () { d.scanning = false; render(true); });
-        } }))));
 
     if (busy) a.appendChild(h('p', { class: 'hint', role: 'status', text: d.scanning ? 'Reading the webpage and looking for images…' : 'Preparing your selected photos…' }));
     if (!d.result) return;
     if (!d.result.images.length) {
-      a.appendChild(h('div', { class: 'import-empty' }, h('h2', { text: 'No photos found' }), h('p', { text: 'Try the direct product page, or add the photos yourself.' }),
-        h('button', { class: 'btn', text: 'Add item manually', type: 'button', onclick: function () { openEditor(null, null, { source: d.result.source, name: d.result.name, price: d.result.price, importSession: d }); } })));
+      a.appendChild(h('div', { class: 'import-empty' }, h('h2', { text: 'No photos found' }), h('p', { text: 'Try a direct product link, or open Other ways to add this piece above.' })));
       return;
     }
     var grid = h('div', { class: 'import-grid' });
@@ -733,7 +736,7 @@
       grid.appendChild(label);
     });
     a.appendChild(grid);
-    a.appendChild(h('div', { class: 'category-save-bar' }, h('p', { class: 'hint', text: 'Nothing is saved until you confirm the item details.' }), use));
+    a.appendChild(h('div', { class: 'import-save-bar' }, h('p', { class: 'hint', text: 'Nothing is saved until you confirm the item details.' }), use));
   }
 
   function adminItems(a) {

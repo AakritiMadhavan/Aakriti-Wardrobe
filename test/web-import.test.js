@@ -93,8 +93,8 @@ test('AJIO thumbnails do not duplicate or replace high resolution gallery photos
  const r=extractPage(html+'<img src="https://assets-jiocdn.ajio.com/medias/thumbnail/-78Wx98H-443068138-brown-MODEL.jpg">','https://www.ajio.com/product');
  assert.equal(r.images.length,5);assert.ok(r.images[0].includes('1117Wx1400H'));
 });
-test('blocked imports explain the saved-webpage fallback',async(t)=>{
- mockNetwork(t,[{status:403}]);await assert.rejects(download('http://example.com'),/Import a saved webpage/);
+test('blocked imports point to the recovery options',async(t)=>{
+ mockNetwork(t,[{status:403}]);await assert.rejects(download('http://example.com'),/Other ways to add this piece/);
 });
 
 test('Myntra assigned gallery imports all seven photos without templates, videos or menu images',()=>{
@@ -118,4 +118,20 @@ test('AVIF detection checks major and compatible brands without accepting generi
  assert.equal(imageType(box('mif1',['heic'])),null);
  const truncated=box('avif');truncated.writeUInt32BE(64);assert.equal(imageType(truncated),null);
  assert.equal(imageType(Buffer.from('not an avif file')),null);
+});
+
+test('Nykaa Jamoti gallery excludes review, delivery and brand images',()=>{
+ const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'fixtures/nykaa-jamoti-gallery.html'),'utf8');
+ const r=extractPage(html,'https://www.nykaafashion.com/product/p/17677054');
+ assert.equal(r.images.length,7);
+ assert.ok(r.images.every(url=>url.includes('9d63b09221700_')));
+ assert.equal(r.name,'HOUSE OF JAMOTI Dark Lavender Anarkali Kurta with Skirt and Dupatta (Set of 3)');
+});
+test('Myntra browser header is scoped so Nykaa page and CDN retain the original request profile',async(t)=>{
+ mockNetwork(t,[{}, {}, {}],(url,opts)=>{
+  assert.equal(opts.headers['User-Agent'],url.hostname==='www.myntra.com'?'Mozilla/5.0':'WardrobeImporter/1.0');
+ });
+ await download('http://www.nykaafashion.com/product');
+ await download('http://adn-static1.nykaa.com/photo.jpg',{image:true});
+ await download('http://www.myntra.com/product');
 });

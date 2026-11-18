@@ -913,10 +913,19 @@ body.on-login .studio-login { width:100%; max-width:1100px; margin:0; min-height
  #editor .ed-foot .grp { width:100%; justify-content:flex-end; }
 }
 
-.import-saved-page { border:1px solid var(--line); border-radius:10px; padding:16px 20px; background:var(--surface); }
-.import-saved-page > summary { cursor:pointer; color:var(--accent); font-size:14px; }
-.import-saved-page > p,.import-saved-page > label { margin-top:16px; }
-.import-saved-page input { max-width:100%; font-size:14px; }
+/* Import tools share the studio's button and panel styling. */
+.import-feedback { padding:14px 18px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.import-feedback .err { margin:0; }
+.import-help { border-bottom:1px solid var(--line); padding:4px 0 16px; }
+.import-help > summary { cursor:pointer; color:var(--muted); font-size:14px; padding:8px 0; }
+.import-help-content { display:grid; gap:16px; padding:12px 0 4px; }
+.import-help-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.import-html-input { display:none; }
+.import-workspace .btn { height:42px; min-height:42px; padding:0 18px; border-radius:6px; font-size:14px; font-weight:500; text-decoration:none; }
+.import-workspace .import-form .field { margin:0; }
+.import-workspace .import-form.panel { margin:0; }
+.import-save-bar { position:sticky; bottom:12px; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 18px; border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); }
+@media(max-width:700px){.import-help-actions .btn{flex:1 1 150px;}.import-save-bar{align-items:stretch;flex-direction:column;gap:10px;}.import-workspace .import-form > .btn{width:100%;}}
 
 /* Category links open all pieces; the adjacent control exposes subcategory links. */
 .nav-category { display:flex; align-items:center; position:relative; }
