@@ -171,11 +171,11 @@
       function open() {
         var rect = group.getBoundingClientRect();
         menu.style.top = rect.bottom + 'px';
-        menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 248)) + 'px';
+        menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - Math.min(420, window.innerWidth - 16) - 8)) + 'px';
         menu.style.maxHeight = Math.max(80, window.innerHeight - rect.bottom - 16) + 'px';
         menu.hidden = false; toggle.setAttribute('aria-expanded', 'true');
       }
-      var toggle = h('button', { class: 'subcategory-toggle', type: 'button', text: '⌄', 'aria-label': 'Show subcategories for ' + c.name, 'aria-expanded': 'false',
+      var toggle = h('button', { class: 'subcategory-toggle', type: 'button', text: '', 'aria-label': 'Show subcategories for ' + c.name, 'aria-expanded': 'false',
         onclick: function () { if (menu.hidden) open(); else close(); } });
       group.appendChild(toggle); group.appendChild(menu);
       group.addEventListener('mouseenter', open);
@@ -185,7 +185,7 @@
       group.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { toggle.focus(); close(); ev.stopPropagation(); } });
       return group;
     }
-    els.navList.appendChild(h('li', null, h('a', { href: '#home', 'aria-label': 'Home', title: 'Home', 'aria-current': cur === 'home' ? 'page' : null },
+    els.navList.appendChild(h('li', { class: 'nav-home' }, h('a', { href: '#home', 'aria-label': 'Home', title: 'Home' },
       svgEl('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1Z"/></svg>'))));
     primary.forEach(function (c) { els.navList.appendChild(h('li', null, categoryNav(c))); });
     if (extra.length) {
@@ -317,7 +317,16 @@
           label ? h('span', { class: 'cat', text: label }) : null,
           h('h3', { text: it.name }),
           h('div', { class: 'price' }, h('b', { text: rupee(it.price) })))));
-    if (isAdmin) art.appendChild(h('button', { class: 'btn sm edit-pill', type: 'button', onclick: function () { openEditor(it); }, text: 'Edit' }));
+    var copy = h('button', { class: 'btn sm preview-copy', type: 'button', 'aria-label': 'Copy link to ' + it.name, title: 'Copy link', onclick: function () {
+      var url = location.origin + location.pathname + '#p-' + it.id;
+      function fallback() {
+        var input = art.querySelector('.preview-link');
+        if (!input) { input = h('input', { class: 'preview-link', type: 'text', readonly: true, 'aria-label': 'Link to ' + it.name }); art.appendChild(input); }
+        input.value = url; input.focus(); input.select();
+      }
+      try { navigator.clipboard.writeText(url).then(function () { toast('Link copied'); }, fallback); } catch (e) { fallback(); }
+    } }, svgEl('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/></svg>'));
+    art.appendChild(copy);
     return art;
   }
 
