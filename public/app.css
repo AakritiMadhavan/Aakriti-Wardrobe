@@ -934,3 +934,9 @@ body.on-login .studio-login { width:100%; max-width:1100px; margin:0; min-height
 .preview-copy { position:absolute; top:8px; right:8px; z-index:2; width:36px; height:36px; padding:7px; background:var(--surface); color:var(--fg); box-shadow:0 2px 8px #0002; }
 .preview-copy svg,.copy-link-icon svg { display:block; flex:none; }
 .preview-link { width:100%; margin-top:8px; }
+
+/* Keep navigation neutral on the current category and subcategory. */
+.catnav a[aria-current="page"] { color:var(--muted); border-bottom-color:transparent; }
+.nav-other > summary.other-active { color:var(--muted); border-bottom-color:transparent; }
+.catnav .other-menu a[aria-current="page"],.catnav .subcategory-menu a[aria-current="page"] { background:transparent; color:var(--muted); }
+.catnav .other-menu a:hover,.catnav .subcategory-menu a:hover,.catnav .subcategory-menu a:focus-visible { background:var(--accent-soft); color:var(--accent); }

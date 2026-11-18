@@ -497,6 +497,7 @@
       try { navigator.clipboard.writeText(url).then(done, showBox); } catch (e) { showBox(); }
     });
     actions.appendChild(copyBtn);
+    if (isAdmin) actions.appendChild(h('button', { class: 'btn', type: 'button', text: 'Edit item', onclick: function () { openEditor(it); } }));
 
     f.appendChild(h('section', { class: 'item' },
       h('div', { class: 'gal' }, main, it.images.length > 1 ? thumbs : null),
