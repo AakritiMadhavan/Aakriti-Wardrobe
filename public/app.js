@@ -918,6 +918,7 @@
         subcat.appendChild(h('option', { value: s.id, text: s.name, selected: s.id === draft.subcat }));
       });
       if (!(category && (category.subcategories || []).some(function (s) { return s.id === draft.subcat; }))) draft.subcat = '';
+      subcat.value = draft.subcat;
     }
     var cat = h('select', { id: 'f-cat', onchange: function () { draft.cat = cat.value; drawSubcategories(); } },
       state.categories.map(function (c) { return h('option', { value: c.id, text: c.name, selected: c.id === draft.cat }); }));
@@ -927,6 +928,8 @@
 
     saveBtn = h('button', { class: 'btn primary', type: 'button', text: isEdit ? 'Save changes' : 'Add to catalogue', onclick: function () {
       err.textContent = '';
+      draft.cat = cat.value;
+      draft.subcat = subcat.value;
       var nm = String(draft.name).trim(), p = Math.round(Number(draft.price));
       if (!nm) { err.textContent = 'Give the item a name.'; name.focus(); return; }
       if (!draft.cat || !catById(draft.cat)) { err.textContent = 'Choose a category.'; return; }
