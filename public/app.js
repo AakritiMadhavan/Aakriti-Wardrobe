@@ -158,14 +158,40 @@
     var standard = ['lingerie', 'layering', 'topwear', 'bottomwear', 'dresses', 'nightwear', 'activewear', 'footwear'];
     var primary = state.categories.filter(function (c) { return standard.indexOf(c.id) !== -1; });
     var extra = state.categories.filter(function (c) { return standard.indexOf(c.id) === -1; });
-    var links = [{ t: 'home', n: 'Home' }].concat(primary.map(function (c) { return { t: 'c-' + c.id, n: c.name }; }));
-    links.forEach(function (l) {
-      els.navList.appendChild(h('li', null, h('a', { href: '#' + l.t, text: l.n, 'aria-current': cur === l.t ? 'page' : null })));
-    });
+    function categoryNav(c) {
+      var group = h('div', { class: 'nav-category' });
+      group.appendChild(h('a', { href: '#c-' + c.id, text: c.name, 'aria-current': cur === 'c-' + c.id ? 'page' : null }));
+      if (!(c.subcategories || []).length) return group;
+      var menu = h('div', { class: 'subcategory-menu', hidden: true }, c.subcategories.map(function (sub) {
+        return h('a', { href: '#c-' + c.id + '?sub=' + encodeURIComponent(sub.id), text: sub.name,
+          'aria-current': route.name === 'cat' && route.id === c.id && route.subcat === sub.id ? 'page' : null,
+          onclick: function () { close(); var other = els.navList.querySelector('.nav-other'); if (other) other.open = false; } });
+      }));
+      function close() { menu.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
+      function open() {
+        var rect = group.getBoundingClientRect();
+        menu.style.top = rect.bottom + 'px';
+        menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 248)) + 'px';
+        menu.style.maxHeight = Math.max(80, window.innerHeight - rect.bottom - 16) + 'px';
+        menu.hidden = false; toggle.setAttribute('aria-expanded', 'true');
+      }
+      var toggle = h('button', { class: 'subcategory-toggle', type: 'button', text: '⌄', 'aria-label': 'Show subcategories for ' + c.name, 'aria-expanded': 'false',
+        onclick: function () { if (menu.hidden) open(); else close(); } });
+      group.appendChild(toggle); group.appendChild(menu);
+      group.addEventListener('mouseenter', open);
+      group.addEventListener('mouseleave', close);
+      group.addEventListener('focusin', open);
+      group.addEventListener('focusout', function (ev) { if (!group.contains(ev.relatedTarget)) close(); });
+      group.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { toggle.focus(); close(); ev.stopPropagation(); } });
+      return group;
+    }
+    els.navList.appendChild(h('li', null, h('a', { href: '#home', 'aria-label': 'Home', title: 'Home', 'aria-current': cur === 'home' ? 'page' : null },
+      svgEl('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1Z"/></svg>'))));
+    primary.forEach(function (c) { els.navList.appendChild(h('li', null, categoryNav(c))); });
     if (extra.length) {
       var active = extra.some(function (c) { return cur === 'c-' + c.id; });
       var menu = h('div', { class: 'other-menu' }, extra.map(function (c) {
-        return h('a', { href: '#c-' + c.id, text: c.name, 'aria-current': cur === 'c-' + c.id ? 'page' : null, onclick: function () { dropdown.open = false; } });
+        return categoryNav(c);
       }));
       var dropdown = h('details', { class: 'nav-other', ontoggle: function () {
         if (!dropdown.open) return;
@@ -187,7 +213,7 @@
   function parseRoute() {
     var t = (location.hash || '').replace(/^#/, '');
     if (t.indexOf('p-') === 0) return { name: 'item', id: t.slice(2), token: t };
-    if (t.indexOf('c-') === 0) return { name: 'cat', id: t.slice(2), token: t };
+    if (t.indexOf('c-') === 0) { var parts = t.slice(2).split('?'); return { name: 'cat', id: parts[0], subcat: new URLSearchParams(parts[1] || '').get('sub') || '', token: t }; }
     if (t === 'new' || t === 'search' || t === 'admin' || t === 'wishlist' || t === 'diary') return { name: t, token: t };
     return { name: 'home', token: 'home' };
   }
@@ -278,16 +304,17 @@
       m.appendChild(h('img', { src: img(it.images[0]), alt: it.name, loading: 'lazy', decoding: 'async' }));
       if (it.images[1]) m.appendChild(h('img', { class: 'alt', src: img(it.images[1]), alt: '', loading: 'lazy', decoding: 'async' }));
     } else m.appendChild(placeholder(it));
-    if (isNew(it)) m.appendChild(h('div', { class: 'tags' }, h('span', { class: 'tag new', text: 'New' })));
     return m;
   }
   function card(it) {
     var c = catById(it.cat);
+    var subcategory = c && (c.subcategories || []).find(function (sub) { return sub.id === it.subcat; });
+    var label = route.name === 'cat' ? (subcategory ? subcategory.name : '') : (c ? c.name : 'Uncategorised');
     var art = h('article', { class: 'card' },
       h('a', { class: 'card-main', href: '#p-' + it.id },
         media(it),
         h('div', { class: 'card-info' },
-          h('span', { class: 'cat', text: c ? c.name : 'Uncategorised' }),
+          label ? h('span', { class: 'cat', text: label }) : null,
           h('h3', { text: it.name }),
           h('div', { class: 'price' }, h('b', { text: rupee(it.price) })))));
     if (isAdmin) art.appendChild(h('button', { class: 'btn sm edit-pill', type: 'button', onclick: function () { openEditor(it); }, text: 'Edit' }));
@@ -316,13 +343,13 @@
     var catalogHeading = h('header', { class: 'catalog-heading' }, crumbs(o.crumbs.slice(0, -1)));
     f.appendChild(catalogHeading);
     var subEl = h('p');
-    var selectedSubcategory = '';
+    var selectedSubcategory = o.name === 'cat' && (o.subcategories || []).some(function (s) { return s.id === route.subcat; }) ? route.subcat : '';
     var subcategoryFilter = o.subcategories && o.subcategories.length ? h('select', {
       class: 'subcat-filter',
       'aria-label': 'Filter by subcategory',
       onchange: function () { selectedSubcategory = subcategoryFilter.value; refresh(); }
     }, h('option', { value: '', text: 'All subcategories' }), o.subcategories.map(function (s) {
-      return h('option', { value: s.id, text: s.name });
+      return h('option', { value: s.id, text: s.name, selected: s.id === selectedSubcategory });
     })) : null;
     catalogHeading.appendChild(h('div', { class: 'list-head category-heading' }, h('h2', { text: o.title }), subEl));
 
@@ -450,17 +477,17 @@
     }
     var linkSlot = h('div', { class: 'linkbox' });
     var url = location.origin + location.pathname + '#p-' + it.id;
-    var copyBtn = h('button', { class: 'btn', type: 'button', text: 'Copy link' });
+    var copyBtn = h('button', { class: 'btn copy-link-icon', type: 'button', 'aria-label': 'Copy link', title: 'Copy link' });
+    copyBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/></svg>';
     function showBox() {
       var inp = h('input', { type: 'text', readonly: true, value: url, 'aria-label': 'Link to this piece' });
       clear(linkSlot); linkSlot.appendChild(inp); inp.focus(); inp.select();
     }
     copyBtn.addEventListener('click', function () {
-      var done = function () { copyBtn.textContent = 'Link copied'; setTimeout(function () { copyBtn.textContent = 'Copy link'; }, 2000); };
+      var done = function () { toast('Link copied'); };
       try { navigator.clipboard.writeText(url).then(done, showBox); } catch (e) { showBox(); }
     });
     actions.appendChild(copyBtn);
-    if (isAdmin) actions.appendChild(h('button', { class: 'btn', type: 'button', text: 'Edit item', onclick: function () { openEditor(it); } }));
 
     f.appendChild(h('section', { class: 'item' },
       h('div', { class: 'gal' }, main, it.images.length > 1 ? thumbs : null),
@@ -619,7 +646,28 @@
       h('button', { class: 'btn primary', type: 'submit', disabled: busy, text: d.scanning ? 'Finding photos…' : 'Find photos' }),
       h('p', { class: 'hint', text: 'Works with public pages. Some sites block imports or load photos only after the page opens. You can always upload photos manually.' }));
     a.appendChild(form);
-    if (d.error) a.appendChild(h('p', { class: 'err', role: 'alert', text: d.error }));
+    if (d.error) {
+      a.appendChild(h('p', { class: 'err', role: 'alert', text: d.error }));
+      var source = d.url.trim();
+      if (/^https?:\/\//i.test(source)) a.appendChild(h('div', { class: 'acts' },
+        h('a', { class: 'btn', href: source, target: '_blank', rel: 'noopener noreferrer', text: 'Open product page' }),
+        h('button', { class: 'btn', type: 'button', text: 'Add item manually', onclick: function () { openEditor(null, null, { source: source, importSession: d }); } })));
+    }
+    a.appendChild(h('details', { class: 'import-saved-page', open: !!d.error },
+      h('summary', { text: 'Import a saved webpage instead' }),
+      h('p', { class: 'hint', text: 'If a site blocks automatic imports: open the product page in your browser, save it as Webpage, HTML Only, then choose that .html file here. Keep the original link in the field above.' }),
+      h('label', { class: 'field' }, h('span', { text: 'Saved webpage (.html)' }),
+        h('input', { type: 'file', accept: '.html,.htm,text/html', disabled: busy, 'aria-label': 'Saved webpage HTML', onchange: function (ev) {
+          var file = ev.target.files[0];
+          if (!file || d.scanning || d.preparing) return;
+          if (!d.url.trim()) { d.error = 'Enter the original webpage link above first.'; render(true); return; }
+          if (file.size > 2 * 1024 * 1024) { d.error = 'Choose an HTML-only file smaller than 2 MB.'; render(true); return; }
+          var fd = new FormData(); fd.append('page', file); fd.append('url', d.url.trim());
+          d.scanning = true; d.error = ''; d.result = null; d.selected = []; render(true);
+          api('POST', '/api/import/html', fd).then(function (result) { d.result = result; })
+            .catch(function (e) { d.error = e.message; }).then(function () { d.scanning = false; render(true); });
+        } }))));
+
     if (busy) a.appendChild(h('p', { class: 'hint', role: 'status', text: d.scanning ? 'Reading the webpage and looking for images…' : 'Preparing your selected photos…' }));
     if (!d.result) return;
     if (!d.result.images.length) {
@@ -785,7 +833,7 @@
 
   /* ---------- item editor ---------- */
   function shrink(file) {
-    if (!/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) return Promise.reject(new Error('Use JPG, PNG or WebP photos.'));
+    if (!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(file.type)) return Promise.reject(new Error('Use JPG, PNG, WebP, GIF or AVIF photos.'));
     return createImageBitmap(file).then(function (bmp) {
       var k = Math.min(1, 1500 / Math.max(bmp.width, bmp.height));
       var c = document.createElement('canvas');
@@ -848,11 +896,11 @@
     photos.addEventListener('drop', function (ev) { ev.preventDefault(); photos.classList.remove('drag'); addFiles(ev.dataTransfer.files); });
 
     var name = h('input', { type: 'text', id: 'f-name', value: draft.name, maxlength: 100, oninput: function () { draft.name = name.value; } });
-    var subcat = h('select', { id: 'f-subcat', onchange: function () { draft.subcat = subcat.value; } });
+    var subcat = h('select', { id: 'f-subcat', required: true, onchange: function () { draft.subcat = subcat.value; } });
     function drawSubcategories() {
       clear(subcat);
       var category = catById(draft.cat);
-      subcat.appendChild(h('option', { value: '', text: 'No subcategory' }));
+      subcat.appendChild(h('option', { value: '', text: category && (category.subcategories || []).length ? 'Choose a subcategory' : 'Add a subcategory in Categories first', disabled: true }));
       (category ? category.subcategories || [] : []).forEach(function (s) {
         subcat.appendChild(h('option', { value: s.id, text: s.name, selected: s.id === draft.subcat }));
       });
@@ -869,6 +917,7 @@
       var nm = String(draft.name).trim(), p = Math.round(Number(draft.price));
       if (!nm) { err.textContent = 'Give the item a name.'; name.focus(); return; }
       if (!draft.cat || !catById(draft.cat)) { err.textContent = 'Choose a category.'; return; }
+      if (!draft.subcat || !(catById(draft.cat).subcategories || []).some(function (s) { return s.id === draft.subcat; })) { err.textContent = 'Choose a subcategory. If none are available, add one in Categories first.'; subcat.focus(); return; }
       if (!(p > 0)) { err.textContent = 'Enter a price greater than zero.'; price.focus(); return; }
       if (draft.original_link && !/^https?:\/\//i.test(draft.original_link)) { err.textContent = 'Original link must start with http:// or https://.'; originalLink.focus(); return; }
       var fd = new FormData(), order = [], n = 0;
@@ -894,7 +943,7 @@
           if (wishlist.entries) wishlist.entries = wishlist.entries.filter(function (entry) { return entry.id !== imported.wishlistId; });
           if (wishlistDraft.id === imported.wishlistId) wishlistDraft = { id: '', title: '', url: '', saving: false, error: '' };
         }
-        return reload().then(function () { if (!isEdit && res.id && route.name !== 'admin') location.hash = 'p-' + res.id; });
+        return reload().then(function () { if (!isEdit && res.id && (route.name !== 'admin' || (imported && imported.importSession))) location.hash = 'p-' + res.id; });
       }).catch(function (e) { saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save changes' : 'Add to catalogue'; err.textContent = e.message; });
     } });
 
@@ -902,12 +951,12 @@
     d.appendChild(h('div', { class: 'ed' },
       h('h2', { text: isEdit ? 'Edit item' : 'Add item' }),
       h('div', { class: 'field editor-photos' }, h('span', { class: 'lbl', text: 'Photos' }), photos,
-        h('span', { class: 'hint', text: 'The first photo is the cover. JPG, PNG or WebP. Large photos are resized for you.' })),
+        h('span', { class: 'hint', text: 'The first photo is the cover. JPG, PNG, WebP, GIF or AVIF. Large photos are resized for you.' })),
       h('div', { class: 'field editor-name' }, h('label', { for: 'f-name', text: 'Name' }), name),
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'f-cat', text: 'Category' }), cat),
         h('div', { class: 'field' }, h('label', { for: 'f-price', text: 'Price (₹)' }), price)),
-      h('div', { class: 'field' }, h('label', { for: 'f-subcat', text: 'Subcategory (optional)' }), subcat),
+      h('div', { class: 'field' }, h('label', { for: 'f-subcat', text: 'Subcategory' }), subcat),
       h('div', { class: 'field' }, h('label', { for: 'f-original-link', text: 'Original link' }), originalLink),
       err));
     d.appendChild(h('div', { class: 'ed-foot' },

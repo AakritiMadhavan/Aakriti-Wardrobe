@@ -71,12 +71,7 @@ const upload = multer({
 
 // Decide the real type from the file's first bytes, never from what the browser claims.
 function sniffImage(buf) {
-  if (!buf || buf.length < 12) return null;
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
-  if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (buf.slice(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
-  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
-  return null;
+  return webImport.imageType(buf);
 }
 
 /* ---------- data access ---------- */
@@ -197,6 +192,14 @@ app.post('/api/import/scan', requireAdmin, wrap(async (req, res) => {
     res.json({ ...result, images: result.images.map((url, i) => ({ id: i, preview: '/api/import/image?token=' + encodeURIComponent(importToken(url, page.url)) })) });
   } finally { importScans--; }
 }));
+app.post('/api/import/html', requireAdmin, upload.single('page'), wrap(async (req, res) => {
+  const source = webImport.webURL(req.body.url).href;
+  if (!req.file || !/\.html?$/i.test(req.file.originalname)) throw webImport.fail('Choose a saved .html or .htm webpage.');
+  if (req.file.size > 2 * 1024 * 1024) throw webImport.fail('The saved webpage is larger than 2 MB. Save it as HTML only.');
+  const result = webImport.extractPage(req.file.buffer.toString('utf8'), source);
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...result, images: result.images.map((url, i) => ({ id: i, preview: '/api/import/image?token=' + encodeURIComponent(importToken(url, source)) })) });
+}));
 app.get('/api/import/image', requireAdmin, wrap(async (req, res) => {
   const value = readImportToken(req.query.token);
   if (importImages >= 12) return res.status(429).json({ error: 'Too many image requests. Try again in a moment.' });
@@ -204,7 +207,7 @@ app.get('/api/import/image', requireAdmin, wrap(async (req, res) => {
   try {
     const file = await webImport.download(value.url, { image: true, referer: value.source });
     const type = webImport.imageType(file.data);
-    if (!type) throw webImport.fail('This image is not a supported JPG, PNG, WebP or GIF photo.');
+    if (!type) throw webImport.fail('This image is not a supported JPG, PNG, WebP, GIF or AVIF photo.');
     res.set({ 'Content-Type': type, 'Cache-Control': 'private, max-age=600', 'X-Content-Type-Options': 'nosniff' });
     res.send(file.data);
   } finally { importImages--; }
@@ -264,7 +267,8 @@ function readItemFields(req) {
   if (!name) return { error: 'Give the item a name.' };
   if (!(price > 0) || price > 10000000) return { error: 'Enter a price greater than zero.' };
   if (!cat) return { error: 'Choose a category.' };
-  if (subcat && !/^[a-z0-9-]{1,120}$/.test(subcat)) return { error: 'Choose a valid subcategory.' };
+  if (!subcat) return { error: 'Choose a subcategory.' };
+  if (!/^[a-z0-9-]{1,120}$/.test(subcat)) return { error: 'Choose a valid subcategory.' };
   if (originalLink && !/^https?:\/\//i.test(originalLink)) return { error: 'Original link must start with http:// or https://.' };
   return { name, cat, subcat, price, originalLink };
 }
@@ -275,7 +279,7 @@ function resolveOrder(req, existing) {
   if (!Array.isArray(order) || order.length > 12) return { error: 'Too many photos.' };
   const files = req.files || [];
   const types = files.map((f) => sniffImage(f.buffer));
-  if (types.some((t) => !t)) return { error: 'Only JPG, PNG, WebP or GIF photos are allowed.' };
+  if (types.some((t) => !t)) return { error: 'Only JPG, PNG, WebP, GIF or AVIF photos are allowed.' };
   const final = []; // { id } for kept photos, { index } for new ones
   const usedNew = new Set();
   const keptIds = new Set();

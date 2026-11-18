@@ -78,3 +78,44 @@ test('reads Next.js galleries, thumbnail galleries, inline backgrounds and noscr
  const r=extractPage(`<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"product":{"images":[{"src":"/one.jpg"},{"originalSrc":"/two.jpg"}]}}}}</script><img width="40" src="/thumb.jpg"><div style="background-image:url('/background.jpg')"></div><noscript><img src="/fallback.jpg"></noscript>`,'https://example.com');
  for(const name of ['one','two','thumb','background','fallback']) assert.ok(r.images.includes('https://example.com/'+name+'.jpg'),name);
 });
+test('AJIO assigned hydration JSON yields five high-resolution images and metadata',()=>{
+ const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'fixtures/ajio-gallery.html'),'utf8');
+ const r=extractPage(html,'https://www.ajio.com/fig-women-wide-leg-flat-front-pants/p/443068138_brown');
+ assert.equal(r.images.length,5);assert.ok(r.images.every(u=>u.includes('1117Wx1400H')));assert.equal(r.price,899);assert.equal(r.name,'Women Wide-Leg Flat-Front Pants');
+});
+test('assigned state reader handles escaped quotes/braces without executing JavaScript',()=>{
+ const {assignedJSON}=require('../lib/web-import');
+ assert.deepEqual(assignedJSON('window.__PRELOADED_STATE__ = {"name":"a \\" } brace","nested":[1,2]}; throw new Error("must not run");'),[{name:'a " } brace',nested:[1,2]}]);
+ assert.deepEqual(assignedJSON('window.__PRELOADED_STATE__ = alert("not JSON");'),[]);
+});
+test('AJIO thumbnails do not duplicate or replace high resolution gallery photos',()=>{
+ const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'fixtures/ajio-gallery.html'),'utf8');
+ const r=extractPage(html+'<img src="https://assets-jiocdn.ajio.com/medias/thumbnail/-78Wx98H-443068138-brown-MODEL.jpg">','https://www.ajio.com/product');
+ assert.equal(r.images.length,5);assert.ok(r.images[0].includes('1117Wx1400H'));
+});
+test('blocked imports explain the saved-webpage fallback',async(t)=>{
+ mockNetwork(t,[{status:403}]);await assert.rejects(download('http://example.com'),/Import a saved webpage/);
+});
+
+test('Myntra assigned gallery imports all seven photos without templates, videos or menu images',()=>{
+ const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'fixtures/myntra-gallery.html'),'utf8');
+ const r=extractPage(html,'https://www.myntra.com/tops/dressberry/product/30038040/buy');
+ assert.equal(r.images.length,7);
+ assert.ok(r.images.every(url=>url.startsWith('https://assets.myntassets.com/h_1440,q_100,w_1080/')));
+ assert.equal(new Set(r.images).size,7);
+ assert.equal(r.name,'DressBerry Floral Printed Gathered Square Neck Peplum Top');
+ assert.equal(r.price,904);
+});
+
+test('AVIF detection checks major and compatible brands without accepting generic HEIF or truncated boxes',()=>{
+ function box(major,compatible=[]) {
+  const b=Buffer.alloc(16+compatible.length*4);b.writeUInt32BE(b.length);b.write('ftyp',4);b.write(major,8);
+  compatible.forEach((brand,i)=>b.write(brand,16+i*4));return b;
+ }
+ assert.equal(imageType(box('avif')),'image/avif');
+ assert.equal(imageType(box('avis')),'image/avif');
+ assert.equal(imageType(box('mif1',['avif'])),'image/avif');
+ assert.equal(imageType(box('mif1',['heic'])),null);
+ const truncated=box('avif');truncated.writeUInt32BE(64);assert.equal(imageType(truncated),null);
+ assert.equal(imageType(Buffer.from('not an avif file')),null);
+});

@@ -912,3 +912,17 @@ body.on-login .studio-login { width:100%; max-width:1100px; margin:0; min-height
  #editor .ed-foot > .hint { display:none; }
  #editor .ed-foot .grp { width:100%; justify-content:flex-end; }
 }
+
+.import-saved-page { border:1px solid var(--line); border-radius:10px; padding:16px 20px; background:var(--surface); }
+.import-saved-page > summary { cursor:pointer; color:var(--accent); font-size:14px; }
+.import-saved-page > p,.import-saved-page > label { margin-top:16px; }
+.import-saved-page input { max-width:100%; font-size:14px; }
+
+/* Category links open all pieces; the adjacent control exposes subcategory links. */
+.nav-category { display:flex; align-items:center; }
+.nav-category > a { flex:1; }
+.subcategory-toggle { flex:none; padding:8px; border:0; background:transparent; color:var(--muted); cursor:pointer; }
+.subcategory-menu { position:fixed; z-index:110; width:240px; overflow-y:auto; padding:6px; border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); }
+.subcategory-menu[hidden] { display:none; }
+.catnav .subcategory-menu a { display:block; text-align:left; padding:12px; margin:0; border:0; border-radius:5px; font-size:13px; text-transform:none; letter-spacing:0; white-space:normal; overflow-wrap:anywhere; }
+.catnav .subcategory-menu a:hover,.catnav .subcategory-menu a:focus-visible,.catnav .subcategory-menu a[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
