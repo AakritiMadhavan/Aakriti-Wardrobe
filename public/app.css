@@ -949,3 +949,7 @@ body.on-login .studio-login { width:100%; max-width:1100px; margin:0; min-height
 .nav-other > summary.other-active { color:var(--muted); border-bottom-color:transparent; }
 .catnav .other-menu a[aria-current="page"],.catnav .subcategory-menu a[aria-current="page"] { background:transparent; color:var(--muted); }
 .catnav .other-menu a:hover,.catnav .subcategory-menu a:hover,.catnav .subcategory-menu a:focus-visible { background:var(--accent-soft); color:var(--accent); }
+
+.pieces-search { margin-bottom:14px; }
+.pieces-search input { width:100%; }
+.pieces-search .hint:empty,.studio-items:empty { display:none; }

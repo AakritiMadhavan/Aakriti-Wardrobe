@@ -59,7 +59,7 @@
 
   /* ---------- state ---------- */
   var state = { settings: { tagline: '', whatsapp: '' }, categories: [], items: [] };
-  var ui = { q: '', min: '', max: '', sort: 'new', tab: 'items' };
+  var ui = { q: '', piecesQuery: '', min: '', max: '', sort: 'new', tab: 'items' };
   var isAdmin = false, loaded = false, loadError = '';
   var els = {}, route = null, lastKey = null, curRefresh = null;
 
@@ -754,7 +754,7 @@
       return;
     }
     var rows = h('div', { class: 'rows studio-items' });
-    state.items.slice().sort(newest).forEach(function (it) {
+    var entries = state.items.slice().sort(newest).map(function (it) {
       var c = catById(it.cat);
       var th = h('div', { class: 'thumb' });
       if (it.images.length) th.appendChild(h('img', { src: img(it.images[0]), alt: '', loading: 'lazy' })); else th.appendChild(placeholder(it, true));
@@ -765,12 +765,28 @@
         api('DELETE', '/api/items/' + encodeURIComponent(it.id)).then(function () { toast('Deleted “' + it.name + '”'); return reload(); })
           .catch(function (e) { del.disabled = false; toast(e.message, true); });
       });
-      rows.appendChild(h('div', { class: 'row' }, th,
+      var row = h('div', { class: 'row' }, th,
         h('div', { class: 'info' }, h('b', { text: it.name }), h('span', { text: [c ? c.name : 'Uncategorised', rupee(it.price), it.images.length + (it.images.length === 1 ? ' photo' : ' photos')].join(' · ') })),
         h('div', { class: 'acts' },
           h('a', { class: 'btn sm', href: '#p-' + it.id, text: 'View' }),
-          h('button', { class: 'btn sm', type: 'button', text: 'Edit', onclick: function () { openEditor(it); } }), del)));
+          h('button', { class: 'btn sm', type: 'button', text: 'Edit', onclick: function () { openEditor(it); } }), del));
+      var sub = c && (c.subcategories || []).find(function (subcat) { return subcat.id === it.subcat; });
+      var fields = [it.name, c ? c.name : 'Uncategorised', sub && sub.name];
+      return { row: row, text: fields.join(' ').toLowerCase() };
     });
+    var search = h('input', { type: 'search', value: ui.piecesQuery, placeholder: 'Search by name, category or subcategory', 'aria-label': 'Search my pieces', oninput: filterPieces });
+    var status = h('p', { class: 'hint', role: 'status' });
+    function filterPieces() {
+      ui.piecesQuery = search.value;
+      var words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      var matches = entries.filter(function (entry) {
+        return words.every(function (word) { return entry.text.includes(word); });
+      });
+      rows.replaceChildren.apply(rows, matches.map(function (entry) { return entry.row; }));
+      status.textContent = !words.length ? '' : matches.length ? matches.length + (matches.length === 1 ? ' piece found' : ' pieces found') : 'No matching pieces.';
+    }
+    a.appendChild(h('div', { class: 'field pieces-search' }, search, status));
+    filterPieces();
     a.appendChild(rows);
   }
 
